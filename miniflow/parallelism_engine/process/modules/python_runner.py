@@ -26,7 +26,17 @@ def python_runner(item: json, output_queue: Queue):
         if not hasattr(run_module, "run"):
             raise AttributeError("The object returned by 'module()' must have a 'run()' method")
 
-        result = run_module.run()
+        context = item.get("context")
+
+        if isinstance(context, str):
+            context = json.loads(context)
+
+        print(f"[PythonRunner] Context: {context}")
+        for key, value in context.items():
+            print(f"[PythonRunner] {key}: {value}")
+            print(f"[PythonRunner] {type(key)}: {type(value)}")
+
+        result = run_module.run(context)
 
         parsed_output = json.loads(result)
         item["result_data"] = parsed_output

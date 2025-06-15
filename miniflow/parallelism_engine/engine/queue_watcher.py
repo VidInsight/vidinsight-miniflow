@@ -80,7 +80,7 @@ class QueueWatcher:
 
         command_data = {
             "command": "start_thread",
-            "data": "process.modules.python_runner.python_runner",
+            "data": "miniflow.parallelism_engine.process.modules.python_runner.python_runner",
             "args": (item,),
             "kwargs": {}
         }
