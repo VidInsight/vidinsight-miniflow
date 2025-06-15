@@ -7,11 +7,8 @@ from ..exceptions import Result
 @handle_db_errors("create record")
 def create_record(db_path, execution_id, node_id, status, result_data=None, error_message=None, started_at=None, ended_at=None):
     """
-    Creates an execution result record with standardized status values:
-    - 'running': Node is currently executing
-    - 'success': Node completed successfully
-    - 'failed': Node execution failed
-    - 'cancelled': Node execution was cancelled
+    Amaç: Standartlaştırılmış durum değerleri ile yürütme sonuç kaydı oluşturur.
+    Döner: Başarılı ise record_id içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
     """
     record_id = generate_uuid()
     
@@ -40,6 +37,10 @@ def create_record(db_path, execution_id, node_id, status, result_data=None, erro
 
 @handle_db_errors("find record")
 def find_record(db_path, record_id):
+    """
+    Amaç: Belirtilen ID'ye sahip yürütme sonuç kaydını bulur.
+    Döner: Başarılı ise record verilerini içeren Result objesi, bulunamazsa None, hata durumunda hata mesajı.
+    """
     query = "SELECT * FROM execution_results WHERE id = ?"
     result = fetch_one(db_path=db_path, query=query, params=(record_id,))
     
@@ -49,6 +50,10 @@ def find_record(db_path, record_id):
 
 @handle_db_errors("delete record")
 def delete_record(db_path, record_id):
+    """
+    Amaç: Belirtilen yürütme sonuç kaydını siler.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     query = "DELETE FROM execution_results WHERE id = ?"
     result = execute_sql_query(db_path=db_path, query=query, params=(record_id,))
     
@@ -60,6 +65,10 @@ def delete_record(db_path, record_id):
 # Executions tablosu ile bağlantılı işlemler
 @handle_db_errors("list execution records")
 def list_execution_records(db_path, execution_id):
+    """
+    Amaç: Belirtilen yürütmeye ait tüm sonuç kayıtlarını node bilgileri ile birlikte listeler.
+    Döner: Başarılı ise execution'a ait record listesi içeren Result objesi, hata durumunda hata mesajı.
+    """
     query = """
     SELECT er.*, n.name as node_name, n.type as node_type 
     FROM execution_results er
@@ -75,6 +84,10 @@ def list_execution_records(db_path, execution_id):
 
 @handle_db_errors("delete execution records")
 def delete_execution_records(db_path, execution_id):
+    """
+    Amaç: Belirtilen yürütmeye ait tüm sonuç kayıtlarını siler.
+    Döner: Başarılı ise silme onayı ve etkilenen satır sayısı içeren Result objesi, hata durumunda hata mesajı.
+    """
     query = "DELETE FROM execution_results WHERE execution_id = ?"
     result = execute_sql_query(db_path=db_path, query=query, params=(execution_id,))
     
@@ -85,16 +98,8 @@ def delete_execution_records(db_path, execution_id):
 @handle_db_errors("combine execution records results")
 def combine_execution_records_results(db_path, execution_id):
     """
-    Combines execution results into a consistent format.
-    Returns a dictionary where each node_id maps to a standardized result object:
-    {
-        "node_id": {
-            "status": "success|failed|cancelled|skipped",
-            "result": <actual_result_data_or_null>,
-            "error": <error_message_or_null>,
-            "timestamp": <completion_timestamp_or_null>
-        }
-    }
+    Amaç: Yürütme sonuçlarını tutarlı format halinde birleştirir, her düğüm için standart sonuç objesi oluşturur.
+    Döner: Başarılı ise her node_id için standartlaştırılmış sonuç objesi dictionary'si içeren Result objesi, hata durumunda hata mesajı.
     """
     # Get all execution records
     records_result = list_execution_records(db_path, execution_id)
@@ -157,6 +162,10 @@ def combine_execution_records_results(db_path, execution_id):
 
 @handle_db_errors("get record status")
 def get_record_status(db_path, record_id):
+    """
+    Amaç: Belirtilen kaydın durum ve zaman bilgilerini getirir.
+    Döner: Başarılı ise status, started_at, ended_at bilgileri içeren Result objesi, hata durumunda hata mesajı.
+    """
     query = "SELECT status, started_at, ended_at FROM execution_results WHERE id = ?"
     result = fetch_one(db_path=db_path, query=query, params=(record_id,))
     
@@ -174,6 +183,10 @@ def get_record_status(db_path, record_id):
 
 @handle_db_errors("get record timestamp")
 def get_record_timestamp(db_path, record_id):
+    """
+    Amaç: Belirtilen kaydın başlangıç ve bitiş zaman bilgilerini getirir.
+    Döner: Başarılı ise started_at ve ended_at bilgileri içeren Result objesi, hata durumunda hata mesajı.
+    """
     query = "SELECT started_at, ended_at FROM execution_results WHERE id = ?"
     result = fetch_one(db_path=db_path, query=query, params=(record_id,))
     

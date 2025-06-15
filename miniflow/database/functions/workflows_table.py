@@ -6,6 +6,10 @@ from ..exceptions import Result
 # Temel CRUD operasyonaları
 @handle_db_errors("create workflow")
 def create_workflow(db_path, name, description=None, version=1):
+    """
+    Amaç: Yeni bir iş akışı oluşturur ve benzersiz ID ile veritabanına kaydeder.
+    Döner: Başarılı ise workflow_id içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     workflow_id = generate_uuid()
     timestamp = generate_timestamp()
 
@@ -25,6 +29,10 @@ def create_workflow(db_path, name, description=None, version=1):
 
 @handle_db_errors("get workflow")
 def get_workflow(db_path, workflow_id):
+    """
+    Amaç: Belirtilen ID'ye sahip iş akışının tüm bilgilerini getirir.
+    Döner: Başarılı ise workflow verilerini içeren Result objesi, bulunamazsa None, hata durumunda hata mesajı.
+    """
     query = "SELECT * FROM workflows WHERE id = ?"
     result = fetch_one(db_path=db_path, query=query, params=(workflow_id,))
 
@@ -34,6 +42,10 @@ def get_workflow(db_path, workflow_id):
 
 @handle_db_errors("delete workflow")
 def delete_workflow(db_path, workflow_id):
+    """
+    Amaç: Belirtilen iş akışını ve tüm ilişkili kayıtları CASCADE ile siler.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Foreign key CASCADE ile otomatik olarak tüm ilişkili kayıtlar silinir
     query = "DELETE FROM workflows WHERE id = ?"
     result = execute_sql_query(
@@ -48,9 +60,8 @@ def delete_workflow(db_path, workflow_id):
 @handle_db_errors("list workflows")
 def list_workflows(db_path, limit=100, offset=0):
     """
-    Lists workflows with pagination.
-    Note: Removed status filtering as workflows table doesn't have a status field.
-    Workflow status is determined by active executions, not stored in workflows table.
+    Amaç: Veritabanındaki tüm iş akışlarını sayfalama ile listeler, en yeni olanlar önce gelir.
+    Döner: Başarılı ise workflow listesi içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
     """
     query = "SELECT * FROM workflows ORDER BY created_at DESC LIMIT ? OFFSET ?"
     params = [limit, offset]

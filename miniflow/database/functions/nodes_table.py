@@ -5,7 +5,10 @@ from ..exceptions import Result
 
 # Helper function for validation
 def _validate_workflow_exists(db_path, workflow_id):
-    """Helper function to validate workflow exists"""
+    """
+    Amaç: Belirtilen workflow ID'nin veritabanında mevcut olup olmadığını kontrol eder.
+    Döner: Workflow mevcutsa True, yoksa False döner.
+    """
     query = "SELECT id FROM workflows WHERE id = ?"
     result = fetch_one(db_path, query, (workflow_id,))
     return result.success and result.data is not None
@@ -14,7 +17,10 @@ def _validate_workflow_exists(db_path, workflow_id):
 # Temel CRUD operasyonaları
 @handle_db_errors("create node")
 def create_node(db_path, workflow_id, name, type, script, params):
-    """Creates a new node with workflow validation"""
+    """
+    Amaç: Belirtilen iş akışına yeni bir düğüm ekler ve workflow doğrulaması yapar.
+    Döner: Başarılı ise node_id içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate required parameters
     if not name or not type:
         return Result.error("Node name and type are required")
@@ -39,6 +45,10 @@ def create_node(db_path, workflow_id, name, type, script, params):
 
 @handle_db_errors("get node")
 def get_node(db_path, node_id):
+    """
+    Amaç: Belirtilen ID'ye sahip düğümün tüm bilgilerini getirir.
+    Döner: Başarılı ise node verilerini içeren Result objesi, bulunamazsa None, hata durumunda hata mesajı.
+    """
     query = "SELECT * FROM nodes WHERE id = ?"
     result = fetch_one(db_path=db_path, query=query, params=(node_id,))
 
@@ -48,6 +58,10 @@ def get_node(db_path, node_id):
 
 @handle_db_errors("delete node")
 def delete_node(db_path, node_id):
+    """
+    Amaç: Belirtilen düğümü veritabanından siler, önce varlığını kontrol eder.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Check if node exists first
     check_result = get_node(db_path, node_id)
     if not check_result.success:
@@ -68,6 +82,10 @@ def delete_node(db_path, node_id):
 
 @handle_db_errors("list nodes")
 def list_nodes(db_path):
+    """
+    Amaç: Veritabanındaki tüm düğümleri listeler.
+    Döner: Başarılı ise node listesi içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     query = "SELECT * FROM nodes"
     result = fetch_all(db_path=db_path, query=query, params=None)
 
@@ -78,6 +96,10 @@ def list_nodes(db_path):
 # Workflow tablosu ile bağlantılı işlemler
 @handle_db_errors("list workflow nodes")
 def list_workflow_nodes(db_path, workflow_id):
+    """
+    Amaç: Belirtilen iş akışına ait tüm düğümleri listeler, workflow varlığını doğrular.
+    Döner: Başarılı ise workflow'a ait node listesi içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Validate workflow exists
     if not _validate_workflow_exists(db_path, workflow_id):
         return Result.error(f"Workflow not found: {workflow_id}")
@@ -91,11 +113,13 @@ def list_workflow_nodes(db_path, workflow_id):
 
 @handle_db_errors("delete workflow nodes")
 def delete_workflow_nodes(db_path, workflow_id):
+    """
+    Amaç: Belirtilen iş akışına ait tüm düğümleri siler, workflow varlığını doğrular.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate workflow exists
     if not _validate_workflow_exists(db_path, workflow_id):
         return Result.error(f"Workflow not found: {workflow_id}")
-    
-    # TODO: In production, should check if any nodes are part of active executions
     
     query = "DELETE FROM nodes WHERE workflow_id = ?"
     result = execute_sql_query(
@@ -110,7 +134,10 @@ def delete_workflow_nodes(db_path, workflow_id):
 # Düğüm işlemleri 
 @handle_db_errors("get node dependents")
 def get_node_dependents(db_path, node_id):
-    """Gets list of nodes that depend on this node (nodes this node points to)"""
+    """
+    Amaç: Bu düğüme bağımlı olan düğümlerin listesini getirir (bu düğümün işaret ettiği düğümler).
+    Döner: Başarılı ise bağımlı node ID'lerinin listesi içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Validate node exists
     if not get_node(db_path, node_id).data:
         return Result.error(f"Node not found: {node_id}")
@@ -131,7 +158,10 @@ def get_node_dependents(db_path, node_id):
 
 @handle_db_errors("get node dependencies")
 def get_node_dependencies(db_path, node_id):
-    """Gets list of nodes this node depends on (nodes that point to this node)"""
+    """
+    Amaç: Bu düğümün bağımlı olduğu düğümlerin listesini getirir (bu düğüme işaret eden düğümler).
+    Döner: Başarılı ise bağımlılık node ID'lerinin listesi içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Validate node exists
     if not get_node(db_path, node_id).data:
         return Result.error(f"Node not found: {node_id}")

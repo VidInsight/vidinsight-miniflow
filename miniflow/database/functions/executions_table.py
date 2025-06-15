@@ -5,7 +5,10 @@ from ..exceptions import Result
 
 # Helper function for validation
 def _validate_workflow_exists(db_path, workflow_id):
-    """Helper function to validate workflow exists"""
+    """
+    Amaç: Belirtilen workflow ID'nin veritabanında mevcut olup olmadığını kontrol eder.
+    Döner: Workflow mevcutsa True, yoksa False döner.
+    """
     query = "SELECT id FROM workflows WHERE id = ?"
     result = fetch_one(db_path, query, (workflow_id,))
     return result.success and result.data is not None
@@ -14,6 +17,10 @@ def _validate_workflow_exists(db_path, workflow_id):
 # Temel CRUD operasyonaları
 @handle_db_errors("create execution")
 def create_execution(db_path, workflow_id):
+    """
+    Amaç: Belirtilen workflow için yeni bir yürütme kaydı oluşturur, workflow varlığını doğrular.
+    Döner: Başarılı ise execution_id içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate workflow exists
     if not _validate_workflow_exists(db_path, workflow_id):
         return Result.error(f"Workflow not found: {workflow_id}")
@@ -36,6 +43,10 @@ def create_execution(db_path, workflow_id):
 
 @handle_db_errors("get execution")
 def get_execution(db_path, execution_id):
+    """
+    Amaç: Belirtilen ID'ye sahip yürütmenin tüm bilgilerini getirir.
+    Döner: Başarılı ise execution verilerini içeren Result objesi, bulunamazsa None, hata durumunda hata mesajı.
+    """
     query = "SELECT * FROM executions WHERE id = ?"
     result = fetch_one(db_path=db_path, query=query, params=(execution_id,))
 
@@ -45,6 +56,10 @@ def get_execution(db_path, execution_id):
 
 @handle_db_errors("delete executions")
 def delete_execution(db_path, execution_id):
+    """
+    Amaç: Belirtilen yürütmeyi veritabanından siler, önce varlığını kontrol eder.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Check if execution exists first
     check_result = get_execution(db_path, execution_id)
     if not check_result.success:
@@ -52,8 +67,6 @@ def delete_execution(db_path, execution_id):
     
     if not check_result.data:
         return Result.error(f"Execution not found: {execution_id}")
-    
-    # TODO: In production, should check execution status and clean up related data
     
     query = "DELETE FROM executions WHERE id = ?"
     result = execute_sql_query(
@@ -67,6 +80,10 @@ def delete_execution(db_path, execution_id):
 
 @handle_db_errors("list executions")
 def list_executions(db_path, workflow_id=None, status=None, limit=100, offset=0):
+    """
+    Amaç: Yürütmeleri workflow ve durum filtreleri ile listeler, sayfalama desteği sağlar.
+    Döner: Başarılı ise execution listesi içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     query = "SELECT * FROM executions"
     params = []
     conditions = []
@@ -95,6 +112,10 @@ def list_executions(db_path, workflow_id=None, status=None, limit=100, offset=0)
 # Scheduler için gerekli fonksyonlar
 @handle_db_errors("set execution ended_at")
 def set_execution_end_time(db_path, execution_id, ended_at):
+    """
+    Amaç: Belirtilen yürütmenin bitiş zamanını günceller, execution varlığını doğrular.
+    Döner: Başarılı ise güncelleme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate execution exists
     if not get_execution(db_path, execution_id).data:
         return Result.error(f"Execution not found: {execution_id}")
@@ -115,6 +136,10 @@ def set_execution_end_time(db_path, execution_id, ended_at):
 
 @handle_db_errors("set execution status")
 def set_execution_status(db_path, execution_id, status_update):
+    """
+    Amaç: Yürütme durumunu günceller, durum geçerliliğini ve execution varlığını doğrular.
+    Döner: Başarılı ise güncelleme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate execution exists
     if not get_execution(db_path, execution_id).data:
         return Result.error(f"Execution not found: {execution_id}")
@@ -159,6 +184,10 @@ def set_execution_status(db_path, execution_id, status_update):
 
 @handle_db_errors("set execution result")
 def set_execution_result(db_path, execution_id, execution_result):
+    """
+    Amaç: Yürütme sonuçlarını JSON formatında günceller, execution varlığını doğrular.
+    Döner: Başarılı ise güncelleme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate execution exists
     if not get_execution(db_path, execution_id).data:
         return Result.error(f"Execution not found: {execution_id}")
@@ -180,8 +209,8 @@ def set_execution_result(db_path, execution_id, execution_result):
 @handle_db_errors("start execution")
 def start_execution(db_path, workflow_id):
     """
-    Starts a workflow execution by creating execution record and queueing tasks
-    This function implements transaction-like behavior for data consistency
+    Amaç: İş akışı yürütmesini başlatır, execution kaydı oluşturur ve görevleri kuyruğa alır, transaction güvenliği sağlar.
+    Döner: Başarılı ise execution_id ve oluşturulan görev bilgileri içeren Result objesi, hata durumunda rollback ile hata mesajı.
     """
     from ..functions.nodes_table import list_workflow_nodes
     from ..functions.execution_queue_table import create_task
@@ -293,7 +322,10 @@ def start_execution(db_path, workflow_id):
 
 @handle_db_errors("stop execution")
 def stop_execution(db_path, execution_id):
-    """Stops a running execution by cancelling pending tasks"""
+    """
+    Amaç: Çalışan bir yürütmeyi durdurur ve bekleyen görevleri iptal eder, durum kontrolü yapar.
+    Döner: Başarılı ise iptal edilen görev bilgileri içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate execution exists
     execution_data = get_execution(db_path, execution_id)
     if not execution_data.success or not execution_data.data:
@@ -325,7 +357,10 @@ def stop_execution(db_path, execution_id):
 
 @handle_db_errors("check execution completion")
 def check_execution_completion(db_path, execution_id):
-    """Checks if execution is complete by examining remaining tasks"""
+    """
+    Amaç: Kalan görevleri inceleyerek yürütmenin tamamlanıp tamamlanmadığını kontrol eder.
+    Döner: Başarılı ise tamamlanma durumu ve görev istatistikleri içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Validate execution exists
     if not get_execution(db_path, execution_id).data:
         return Result.error(f"Execution not found: {execution_id}")

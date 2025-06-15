@@ -7,17 +7,26 @@ VALID_TRIGGER_TYPES = ['schedule', 'webhook', 'file', 'event']
 
 # Helper functions
 def _validate_workflow_exists(db_path, workflow_id):
-    """Helper function to validate workflow exists"""
+    """
+    Amaç: Belirtilen workflow ID'nin veritabanında mevcut olup olmadığını kontrol eder.
+    Döner: Workflow mevcutsa True, yoksa False döner.
+    """
     query = "SELECT id FROM workflows WHERE id = ?"
     result = fetch_one(db_path, query, (workflow_id,))
     return result.success and result.data is not None
 
 def _validate_trigger_type(trigger_type):
-    """Helper function to validate trigger type"""
+    """
+    Amaç: Trigger türünün desteklenen türlerden biri olup olmadığını doğrular.
+    Döner: Geçerli trigger türüyse True, değilse False döner.
+    """
     return trigger_type in VALID_TRIGGER_TYPES
 
 def _parse_trigger_config(config_json):
-    """Helper function to safely parse trigger config"""
+    """
+    Amaç: Trigger konfigürasyonu JSON string'ini güvenli şekilde parse eder.
+    Döner: Parse edilmiş dictionary objesi veya boş dictionary döner.
+    """
     if not config_json:
         return {}
     return safe_json_loads(config_json)
@@ -25,7 +34,10 @@ def _parse_trigger_config(config_json):
 # Temel CRUD operasyonaları
 @handle_db_errors("create trigger")
 def create_trigger(db_path, workflow_id, trigger_type, config=None):
-    """Creates a new trigger for a workflow"""
+    """
+    Amaç: Bir workflow için yeni trigger oluşturur, workflow varlığını ve trigger türünü doğrular.
+    Döner: Başarılı ise trigger_id içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Step 1: Generate trigger ID
     trigger_id = generate_uuid()
     
@@ -56,7 +68,10 @@ def create_trigger(db_path, workflow_id, trigger_type, config=None):
 
 @handle_db_errors("get trigger")
 def get_trigger(db_path, trigger_id):
-    """Retrieves a trigger by ID"""
+    """
+    Amaç: Belirtilen ID'ye sahip trigger'ı workflow bilgileri ile birlikte getirir, config'i parse eder.
+    Döner: Başarılı ise trigger verilerini içeren Result objesi, bulunamazsa None, hata durumunda hata mesajı.
+    """
     # Step 1: Query trigger with workflow info
     query = """
     SELECT t.*, w.name as workflow_name
@@ -83,7 +98,10 @@ def get_trigger(db_path, trigger_id):
 
 @handle_db_errors("delete trigger")
 def delete_trigger(db_path, trigger_id):
-    """Deletes a trigger by ID"""
+    """
+    Amaç: Belirtilen trigger'ı siler, önce varlığını kontrol eder ve etkilenen satır sayısını doğrular.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Step 1: Check if trigger exists
     check_result = fetch_one(db_path, "SELECT id FROM triggers WHERE id = ?", (trigger_id,))
     if not check_result.success:
@@ -110,7 +128,10 @@ def delete_trigger(db_path, trigger_id):
 # Workflow ile bağlantılı işlemler
 @handle_db_errors("list workflow triggers")
 def list_workflow_triggers(db_path, workflow_id):
-    """Lists all triggers for a workflow"""
+    """
+    Amaç: Belirtilen workflow'a ait tüm trigger'ları listeler, config'leri parse eder ve workflow bilgisi ekler.
+    Döner: Başarılı ise workflow'a ait trigger listesi içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Step 1: Query all triggers for workflow
     query = """
     SELECT t.*, w.name as workflow_name
@@ -137,7 +158,10 @@ def list_workflow_triggers(db_path, workflow_id):
 
 @handle_db_errors("delete workflow triggers")
 def delete_workflow_triggers(db_path, workflow_id):
-    """Deletes all triggers for a workflow"""
+    """
+    Amaç: Belirtilen workflow'a ait tüm trigger'ları siler, önce sayısını belirler.
+    Döner: Başarılı ise silme onayı ve silinen trigger sayısı içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Step 1: Count existing triggers first
     count_query = "SELECT COUNT(*) as count FROM triggers WHERE workflow_id = ?"
     count_result = fetch_one(db_path, count_query, (workflow_id,))
@@ -163,7 +187,10 @@ def delete_workflow_triggers(db_path, workflow_id):
 
 @handle_db_errors("get trigger type")
 def get_trigger_type(db_path, trigger_id):
-    """Gets the trigger type for a specific trigger"""
+    """
+    Amaç: Belirtilen trigger'ın türü ve aktif durumu bilgilerini getirir.
+    Döner: Başarılı ise trigger_type ve is_active bilgileri içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Step 1: Query only trigger_type field
     query = "SELECT trigger_type, is_active FROM triggers WHERE id = ?"
     result = fetch_one(db_path, query, (trigger_id,))
@@ -183,7 +210,10 @@ def get_trigger_type(db_path, trigger_id):
 # Additional helper functions
 @handle_db_errors("list triggers")
 def list_triggers(db_path, active_only=False):
-    """Lists all triggers in the system"""
+    """
+    Amaç: Sistemdeki tüm trigger'ları listeler, aktif duruma göre filtreleme yapabilir.
+    Döner: Başarılı ise trigger listesi içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     query = """
     SELECT t.*, w.name as workflow_name
     FROM triggers t
@@ -212,7 +242,10 @@ def list_triggers(db_path, active_only=False):
 
 @handle_db_errors("update trigger")
 def update_trigger(db_path, trigger_id, updates):
-    """Updates a trigger with new values"""
+    """
+    Amaç: Trigger'ın belirtilen alanlarını günceller, alan geçerliliğini ve trigger türü doğrulaması yapar.
+    Döner: Başarılı ise güncelleme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate trigger exists
     check_result = fetch_one(db_path, "SELECT id FROM triggers WHERE id = ?", (trigger_id,))
     if not check_result.success:
@@ -258,10 +291,16 @@ def update_trigger(db_path, trigger_id, updates):
 
 @handle_db_errors("activate trigger")
 def activate_trigger(db_path, trigger_id):
-    """Activates a trigger"""
+    """
+    Amaç: Belirtilen trigger'ı aktif duruma getirir.
+    Döner: Başarılı ise güncelleme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     return update_trigger(db_path, trigger_id, {"is_active": True})
 
 @handle_db_errors("deactivate trigger")
 def deactivate_trigger(db_path, trigger_id):
-    """Deactivates a trigger"""
+    """
+    Amaç: Belirtilen trigger'ı pasif duruma getirir.
+    Döner: Başarılı ise güncelleme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     return update_trigger(db_path, trigger_id, {"is_active": False})

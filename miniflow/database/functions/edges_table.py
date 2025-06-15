@@ -4,13 +4,19 @@ from ..exceptions import Result
 
 # Helper functions for validation
 def _validate_workflow_exists(db_path, workflow_id):
-    """Helper function to validate workflow exists"""
+    """
+    Amaç: Belirtilen workflow ID'nin veritabanında mevcut olup olmadığını kontrol eder.
+    Döner: Workflow mevcutsa True, yoksa False döner.
+    """
     query = "SELECT id FROM workflows WHERE id = ?"
     result = fetch_one(db_path, query, (workflow_id,))
     return result.success and result.data is not None
 
 def _validate_node_exists(db_path, node_id):
-    """Helper function to validate node exists and return its workflow_id"""
+    """
+    Amaç: Belirtilen node ID'nin varlığını kontrol eder ve workflow_id'sini döner.
+    Döner: Node mevcutsa workflow_id string değeri, yoksa None döner.
+    """
     query = "SELECT workflow_id FROM nodes WHERE id = ?"
     result = fetch_one(db_path, query, (node_id,))
     if result.success and result.data:
@@ -18,7 +24,10 @@ def _validate_node_exists(db_path, node_id):
     return None
 
 def _validate_nodes_same_workflow(db_path, from_node_id, to_node_id):
-    """Validates that both nodes exist and belong to the same workflow"""
+    """
+    Amaç: İki düğümün mevcut olduğunu ve aynı workflow'a ait olduğunu doğrular.
+    Döner: Geçerliyse (True, workflow_id) tuple'ı, değilse (False, hata_mesajı) tuple'ı döner.
+    """
     from_workflow = _validate_node_exists(db_path, from_node_id)
     to_workflow = _validate_node_exists(db_path, to_node_id)
     
@@ -32,7 +41,10 @@ def _validate_nodes_same_workflow(db_path, from_node_id, to_node_id):
     return True, from_workflow
 
 def _edge_would_create_cycle(db_path, from_node_id, to_node_id):
-    """Check if adding this edge would create a cycle"""
+    """
+    Amaç: Bu kenarın eklenmesinin iş akışında döngü oluşturup oluşturmayacağını kontrol eder.
+    Döner: Döngü oluşacaksa True, oluşmayacaksa False döner.
+    """
     # Simple cycle detection: check if there's already a path from to_node to from_node
     # This is a basic implementation - for production, consider more sophisticated cycle detection
     
@@ -66,7 +78,10 @@ def _edge_would_create_cycle(db_path, from_node_id, to_node_id):
 # Temel CRUD operasyonaları
 @handle_db_errors("create edge")
 def create_edge(db_path, workflow_id, from_node_id, to_node_id, condition_type='success'):
-    """Creates an edge between two nodes with comprehensive validation"""
+    """
+    Amaç: İki düğüm arasında kapsamlı doğrulama ile kenar oluşturur, döngü tespiti yapar.
+    Döner: Başarılı ise edge_id içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate workflow exists
     if not _validate_workflow_exists(db_path, workflow_id):
         return Result.error(f"Workflow not found: {workflow_id}")
@@ -114,6 +129,10 @@ def create_edge(db_path, workflow_id, from_node_id, to_node_id, condition_type='
 
 @handle_db_errors("get edge")
 def get_edge(db_path, edge_id):
+    """
+    Amaç: Belirtilen ID'ye sahip kenarın tüm bilgilerini getirir.
+    Döner: Başarılı ise edge verilerini içeren Result objesi, bulunamazsa None, hata durumunda hata mesajı.
+    """
     query = "SELECT * FROM edges WHERE id = ?"
     result = fetch_one(db_path=db_path, query=query, params=(edge_id,))
     
@@ -123,6 +142,10 @@ def get_edge(db_path, edge_id):
 
 @handle_db_errors("delete edge")
 def delete_edge(db_path, edge_id):
+    """
+    Amaç: Belirtilen kenarı veritabanından siler, önce varlığını kontrol eder.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Check if edge exists first
     check_result = get_edge(db_path, edge_id)
     if not check_result.success:
@@ -130,8 +153,6 @@ def delete_edge(db_path, edge_id):
     
     if not check_result.data:
         return Result.error(f"Edge not found: {edge_id}")
-    
-    # TODO: In production, should check if edge affects active executions
     
     query = "DELETE FROM edges WHERE id = ?"
     result = execute_sql_query(
@@ -145,6 +166,10 @@ def delete_edge(db_path, edge_id):
 
 @handle_db_errors("list edges")
 def list_edges(db_path):
+    """
+    Amaç: Veritabanındaki tüm kenarları listeler.
+    Döner: Başarılı ise edge listesi içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     query = "SELECT * FROM edges"
     result = fetch_all(db_path=db_path, query=query, params=None)
 
@@ -155,6 +180,10 @@ def list_edges(db_path):
 # Workflow tablosu ile bağlantılı işlemler
 @handle_db_errors("list workflow edges")
 def list_workflow_edges(db_path, workflow_id):
+    """
+    Amaç: Belirtilen iş akışına ait tüm kenarları listeler, workflow varlığını doğrular.
+    Döner: Başarılı ise workflow'a ait edge listesi içeren Result objesi, hata durumunda hata mesajı.
+    """
     # Validate workflow exists
     if not _validate_workflow_exists(db_path, workflow_id):
         return Result.error(f"Workflow not found: {workflow_id}")
@@ -168,11 +197,13 @@ def list_workflow_edges(db_path, workflow_id):
 
 @handle_db_errors("delete workflow edges")
 def delete_workflow_edges(db_path, workflow_id):
+    """
+    Amaç: Belirtilen iş akışına ait tüm kenarları siler, workflow varlığını doğrular.
+    Döner: Başarılı ise silme onayı içeren Result objesi, hata durumunda hata mesajı içeren Result objesi.
+    """
     # Validate workflow exists
     if not _validate_workflow_exists(db_path, workflow_id):
         return Result.error(f"Workflow not found: {workflow_id}")
-    
-    # TODO: In production, should check if any edges affect active executions
     
     query = "DELETE FROM edges WHERE workflow_id = ?"
     result = execute_sql_query(
