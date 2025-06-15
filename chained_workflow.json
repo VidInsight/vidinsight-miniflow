@@ -1,0 +1,54 @@
+{
+  "name": "Zincirleme İşlemler Workflow",
+  "description": "Node'ların birbirlerinin çıktılarını kullandığı 3 adımlı workflow",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "name": "step1",
+      "type": "task",
+      "script": "step1_calculate_sum.py",
+      "parameters": {
+        "description": "İlk adım: İki sayıyı toplar"
+      }
+    },
+    {
+      "name": "step2",
+      "type": "task",
+      "script": "step2_multiply_with_sum.py",
+      "parameters": {
+        "description": "İkinci adım: İlk adımın sonucunu alıp çarpar",
+        "step1_result": "{{step1.result}}"
+      }
+    },
+    {
+      "name": "step3",
+      "type": "task",
+      "script": "step3_calculate_final_average.py",
+      "parameters": {
+        "description": "Üçüncü adım: İlk iki adımın sonuçlarının ortalamasını hesaplar",
+        "step1_result": "{{step1.result}}",
+        "step2_result": "{{step2.result}}"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "step1",
+      "to": "step2",
+      "condition_type": "success"
+    },
+    {
+      "from": "step2",
+      "to": "step3",
+      "condition_type": "success"
+    }
+  ],
+  "triggers": [
+    {
+      "type": "manual",
+      "config": {
+        "description": "Manuel tetikleme"
+      }
+    }
+  ]
+} 
