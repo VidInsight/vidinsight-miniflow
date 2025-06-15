@@ -10,7 +10,7 @@ class ResultMonitor:
     Amaç: Execution sonuçlarını alır ve workflow orchestration'a besler
     """
     
-    def __init__(self, db_path, polling_interval=5):
+    def __init__(self, db_path, polling_interval=5, manager=None):
         """
         Amaç: Result monitor'u başlatır
         Döner: Yok (constructor)
@@ -19,6 +19,7 @@ class ResultMonitor:
         self.polling_interval = polling_interval
         self.running = False
         self.thread = None
+        self.manager = manager
 
     def start(self):
         """
@@ -65,15 +66,10 @@ class ResultMonitor:
         while self.running:
             try:
                 # Output queue'dan sonuçları al
-                results = self.get_from_output_queue()
-                
-                # Her sonucu işle
-                for result in results:
-                    if not self.running:
-                        break
+                result = self.get_from_output_queue()
                     
-                    # Sonucu workflow orchestration'a besle
-                    self.process_result(result)
+                # Sonucu workflow orchestration'a besle
+                self.process_result(result)
                 
                 # Polling interval bekle
                 time.sleep(self.polling_interval)
@@ -90,8 +86,9 @@ class ResultMonitor:
         Şu anda boş liste döner (placeholder)
         """
         # Placeholder implementation
+        result = self.manager.get_output_item()
         # Gerçek implementasyonda burası output queue'yu okuyacak
-        return []
+        return result
 
     def process_result(self, result):
         """
