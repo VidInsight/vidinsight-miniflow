@@ -46,15 +46,14 @@ def delete_workflow(db_path, workflow_id):
     return Result.success({"deleted": True, "workflow_id": workflow_id})
 
 @handle_db_errors("list workflows")
-def list_workflows(db_path, status=None, limit=100, offset=0):
-    query = "SELECT * FROM workflows"
-    params = []
-    if status:
-        query += " WHERE status = ?"
-        params.append(status)
-    
-    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
+def list_workflows(db_path, limit=100, offset=0):
+    """
+    Lists workflows with pagination.
+    Note: Removed status filtering as workflows table doesn't have a status field.
+    Workflow status is determined by active executions, not stored in workflows table.
+    """
+    query = "SELECT * FROM workflows ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params = [limit, offset]
     result = fetch_all(db_path=db_path, query=query, params=params)
         
     if not result.success:

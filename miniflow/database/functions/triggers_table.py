@@ -59,7 +59,7 @@ def get_trigger(db_path, trigger_id):
     """Retrieves a trigger by ID"""
     # Step 1: Query trigger with workflow info
     query = """
-    SELECT t.*, w.name as workflow_name, w.status as workflow_status
+    SELECT t.*, w.name as workflow_name
     FROM triggers t
     JOIN workflows w ON t.workflow_id = w.id
     WHERE t.id = ?
@@ -185,7 +185,7 @@ def get_trigger_type(db_path, trigger_id):
 def list_triggers(db_path, active_only=False):
     """Lists all triggers in the system"""
     query = """
-    SELECT t.*, w.name as workflow_name, w.status as workflow_status
+    SELECT t.*, w.name as workflow_name
     FROM triggers t
     JOIN workflows w ON t.workflow_id = w.id
     """

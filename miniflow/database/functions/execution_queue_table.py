@@ -46,27 +46,31 @@ def delete_task(db_path, task_id):
 
 @handle_db_errors("list tasks")
 def list_tasks(db_path, status=None):
+    """Lists all tasks across all executions with optional status filtering"""
     query = """
     SELECT eq.*, n.name as node_name, n.type as node_type
     FROM execution_queue eq
     JOIN nodes n ON eq.node_id = n.id
     """
     params = []
+    
     if status:
-        query += " AND eq.status = ?"
+        query += " WHERE eq.status = ?"
         params.append(status)
     
     query += " ORDER BY eq.priority DESC, eq.dependency_count ASC"
     result = fetch_all(db_path=db_path, query=query, params=params)
     
     if not result.success:
-        return Result.error(f"Failed to list taks: {result.error}")
-    return Result.success([dict(row) for row in result.data])
+        return Result.error(f"Failed to list tasks: {result.error}")
+    return Result.success(result.data)
 
 @handle_db_errors("count tasks")
-def count_tasks(db_path, status=None):
+def count_tasks(db_path, execution_id, status=None):
+    """Counts tasks for a specific execution with optional status filtering"""
     query = "SELECT COUNT(*) as count FROM execution_queue WHERE execution_id = ?"
-    params = []
+    params = [execution_id]
+    
     if status:
         query += " AND status = ?"
         params.append(status)

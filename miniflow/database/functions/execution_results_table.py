@@ -1,17 +1,26 @@
 from ..core import execute_sql_query, fetch_all, fetch_one, handle_db_errors
-from ..utils import generate_uuid, safe_json_dumps, generate_timestamp
+from ..utils import generate_uuid, safe_json_dumps, generate_timestamp, safe_json_loads
 from ..exceptions import Result
 
 
 # Temel CRUD operasyonaları
 @handle_db_errors("create record")
 def create_record(db_path, execution_id, node_id, status, result_data=None, error_message=None, started_at=None, ended_at=None):
+    """
+    Creates an execution result record with standardized status values:
+    - 'running': Node is currently executing
+    - 'success': Node completed successfully
+    - 'failed': Node execution failed
+    - 'cancelled': Node execution was cancelled
+    """
     record_id = generate_uuid()
     
-    # Set timestamps if not provided
+    # Set timestamps if not provided - only set started_at for all statuses
     if started_at is None:
         started_at = generate_timestamp()
-    if ended_at is None and status in ['completed', 'failed', 'cancelled']:
+    
+    # Set ended_at only for final statuses (success, failed, cancelled)
+    if ended_at is None and status in ['success', 'failed', 'cancelled']:
         ended_at = generate_timestamp()
     
     query = """
@@ -75,6 +84,18 @@ def delete_execution_records(db_path, execution_id):
 
 @handle_db_errors("combine execution records results")
 def combine_execution_records_results(db_path, execution_id):
+    """
+    Combines execution results into a consistent format.
+    Returns a dictionary where each node_id maps to a standardized result object:
+    {
+        "node_id": {
+            "status": "success|failed|cancelled|skipped",
+            "result": <actual_result_data_or_null>,
+            "error": <error_message_or_null>,
+            "timestamp": <completion_timestamp_or_null>
+        }
+    }
+    """
     # Get all execution records
     records_result = list_execution_records(db_path, execution_id)
     if not records_result.success:
@@ -91,7 +112,7 @@ def combine_execution_records_results(db_path, execution_id):
     if not nodes_result.success:
         return Result.error(f"Failed to get workflow nodes: {nodes_result.error}")
     
-    # Create combined results dictionary
+    # Create combined results dictionary with consistent structure
     combined_results = {}
     executed_nodes = set()
     
@@ -100,30 +121,37 @@ def combine_execution_records_results(db_path, execution_id):
         node_id = record["node_id"]
         executed_nodes.add(node_id)
         
+        # Create standardized result structure
+        node_result = {
+            "status": record["status"],
+            "result": None,
+            "error": None,
+            "timestamp": record.get("ended_at") or record.get("started_at")
+        }
+        
         if record["status"] == "failed":
-            # For failed nodes: store error_message directly
-            combined_results[node_id] = record["error_message"] or "Unknown error"
-        elif record["status"] in ["completed", "success"]:
-            # For successful nodes: store result_data directly
-            # Parse JSON string back to object if it exists
+            node_result["error"] = record["error_message"] or "Unknown error"
+        elif record["status"] == "success":
+            # Parse result_data back to original format
             result_data = record["result_data"]
             if result_data:
-                try:
-                    import json
-                    combined_results[node_id] = json.loads(result_data) if isinstance(result_data, str) else result_data
-                except (json.JSONDecodeError, TypeError):
-                    combined_results[node_id] = result_data
+                node_result["result"] = safe_json_loads(result_data)
             else:
-                combined_results[node_id] = None
-        else:
-            # For other statuses: store the status
-            combined_results[node_id] = record["status"]
+                node_result["result"] = None
+        # For other statuses (running, cancelled), keep result and error as None
+        
+        combined_results[node_id] = node_result
     
     # Mark non-executed nodes as SKIPPED
     for node in nodes_result.data:
         node_id = node["node_id"]
         if node_id not in executed_nodes:
-            combined_results[node_id] = "SKIPPED"
+            combined_results[node_id] = {
+                "status": "skipped",
+                "result": None,
+                "error": None,
+                "timestamp": None
+            }
     
     return Result.success(combined_results)
 
