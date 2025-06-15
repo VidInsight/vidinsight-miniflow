@@ -179,3 +179,31 @@ def get_node_dependencies(db_path, node_id):
         
     node_ids = [row["id"] for row in result.data]
     return Result.success(node_ids)
+
+
+@handle_db_errors("update node params")
+def update_node_params(db_path, node_id, params):
+    """
+    Amaç: Belirtilen düğümün parametrelerini günceller
+    Döner: Başarılı ise güncelleme onayı içeren Result objesi, hata durumunda hata mesajı
+    
+    Bu fonksiyon workflow loading sırasında node parameter mapping için kullanılır
+    """
+    # Check if node exists first
+    check_result = get_node(db_path, node_id)
+    if not check_result.success:
+        return check_result
+    
+    if not check_result.data:
+        return Result.error(f"Node not found: {node_id}")
+    
+    query = "UPDATE nodes SET params = ? WHERE id = ?"
+    result = execute_sql_query(
+        db_path=db_path, 
+        query=query, 
+        params=(safe_json_dumps(params), node_id))
+    
+    if not result.success:
+        return Result.error(f"Failed to update node params: {result.error}")
+    
+    return Result.success({"updated": True, "node_id": node_id})
