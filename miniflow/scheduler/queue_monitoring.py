@@ -59,18 +59,44 @@ class QueueMonitor:
 
     def get_ready_tasks(self, limit=10):
         """
-        Amaç: Hazır olan taskları alır (database function kullanır)
+        Amaç: Tüm active execution'lar için hazır olan taskları alır
         Döner: Ready task listesi
         """
-        result = database.get_ready_tasks_for_execution(
-            db_path=self.db_path,
-            execution_id=None,
-            limit=limit
-        )
+        all_ready_tasks = []
         
-        if result.success:
-            return result.data.get('ready_tasks', [])
-        return []
+        try:
+            # Tüm active execution'ları al
+            executions_result = database.list_executions(self.db_path)
+            if not executions_result.success:
+                return []
+            
+            active_executions = [
+                exec_data for exec_data in executions_result.data 
+                if exec_data.get('status') in ['running', 'pending']
+            ]
+            
+            # Her active execution için ready task'ları al
+            for execution in active_executions:
+                execution_id = execution['id']
+                
+                ready_result = database.get_ready_tasks_for_execution(
+                    db_path=self.db_path,
+                    execution_id=execution_id,
+                    limit=limit
+                )
+                
+                if ready_result.success:
+                    ready_tasks = ready_result.data.get('ready_tasks', [])
+                    all_ready_tasks.extend(ready_tasks)
+            
+            # Limit uygula
+            if limit and len(all_ready_tasks) > limit:
+                all_ready_tasks = all_ready_tasks[:limit]
+            
+            return all_ready_tasks
+            
+        except Exception:
+            return []
 
     def reorder_queue(self):
         """
@@ -147,11 +173,15 @@ class QueueMonitor:
                 "node_type": node_info['type']
             }
             
-            # TODO: Send to input queue (later implementation)
+            # Task'ı input queue'ya gönder
+            send_success = self.send_to_input_queue(task_payload)
             
-            # Task'ı queue'dan sil
-            delete_result = database.delete_task(self.db_path, task_id)
-            return delete_result.success
+            if send_success:
+                # Sadece başarılı gönderimden sonra sil
+                delete_result = database.delete_task(self.db_path, task_id)
+                return delete_result.success
+            else:
+                return False
             
         except Exception:
             return False
@@ -159,6 +189,35 @@ class QueueMonitor:
     def send_to_input_queue(self, task_payload):
         """
         Amaç: Task'ı input queue'ya gönderir
-        Döner: Yok
+        Döner: Başarı durumu (True/False)
+        
+        Bu implementasyon test amaçlı simulated execution yapar.
+        Gerçek sistemde burası execution engine'e gönderecek.
         """
-        pass    
+        try:
+            # Simulated execution result oluştur
+            time.sleep(0.1)  # Simulated processing time
+            
+            from ..database.functions.workflow_orchestration import process_execution_result
+            
+            result_data = {
+                "status": "completed",
+                "output": f"Execution output for {task_payload['node_id']}",
+                "timestamp": time.time(),
+                "simulated": True
+            }
+            
+            # Result'ı database'e yaz
+            orchestration_result = process_execution_result(
+                db_path=self.db_path,
+                execution_id=task_payload['execution_id'],
+                node_id=task_payload['node_id'],
+                status="success",
+                result_data=result_data,
+                error_message=None
+            )
+            
+            return orchestration_result.success
+            
+        except Exception:
+            return False    
