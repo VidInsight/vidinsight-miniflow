@@ -15,7 +15,7 @@ class Result:
         return cls(success=True, data=data, metadata=metadata)
     
     @classmethod
-    def failure(cls, error, metadata=None):
+    def error(cls, error, metadata=None):
         """Create a failed result"""
         return cls(success=False, error=error, metadata=metadata)
     

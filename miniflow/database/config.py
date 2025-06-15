@@ -36,11 +36,13 @@ class DatabaseConnection:
                 timeout=self.timeout
             )
             self.connection.row_factory = sqlite3.Row
+            # Enable foreign key constraints
+            self.connection.execute("PRAGMA foreign_keys = ON")
             return self.connection
         except sqlite3.Error as e:
             raise ConnectionError(f"Failed to connect to database: {str(e)}")
         
-    def __exit__(self, exc_type, exc_val):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         if self.connection:
             try:
                 self.connection.close()

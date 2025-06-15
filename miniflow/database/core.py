@@ -1,26 +1,29 @@
-from .config import DatabaseConnection
+from functools import wraps
+from .config import DatabaseConfig
 from .exceptions import Result
 from .schema import *
 
 # İşlem fonksiyonları
 def execute_sql_query(db_path, query, params=None):
     try:
-        conn = DatabaseConnection(db_path)
-        with conn:
-            cursor = conn.cursor()
+        config = DatabaseConfig(db_path)
+        conn = config.get_connection()
+        with conn as db_conn:
+            cursor = db_conn.cursor()
             cursor.execute(query, params or ())
             affected_rows = cursor.rowcount
-            conn.commit()
+            db_conn.commit()
 
             return Result.success(data={"affected_rows": affected_rows})
     except Exception as e:
-        return Result.failure(error=str(e), metadata={"query": query, "params": params})
+        return Result.error(error=str(e), metadata={"query": query, "params": params})
     
 def fetch_one(db_path, query, params=None):
     try:
-        conn = DatabaseConnection(db_path)
-        with conn:
-            cursor = conn.cursor()
+        config = DatabaseConfig(db_path)
+        conn = config.get_connection()
+        with conn as db_conn:
+            cursor = db_conn.cursor()
             cursor.execute(query, params or ())
             row = cursor.fetchone()
 
@@ -28,13 +31,14 @@ def fetch_one(db_path, query, params=None):
 
             return Result.success(data=result)
     except Exception as e:
-        return Result.failure(error=str(e), metadata={"query": query, "params": params})
+        return Result.error(error=str(e), metadata={"query": query, "params": params})
             
 def fetch_all(db_path, query, params=None):
     try:
-        conn = DatabaseConnection(db_path)
-        with conn:
-            cursor = conn.cursor()
+        config = DatabaseConfig(db_path)
+        conn = config.get_connection()
+        with conn as db_conn:
+            cursor = db_conn.cursor()
             cursor.execute(query, params or ())
             rows = cursor.fetchall()
 
@@ -42,13 +46,14 @@ def fetch_all(db_path, query, params=None):
 
             return Result.success(data=result)
     except Exception as e:
-        return Result.failure(error=str(e), metadata={"query": query, "params": params})
+        return Result.error(error=str(e), metadata={"query": query, "params": params})
     
 def check_database_connection(db_path):
     try:
-        conn = DatabaseConnection(db_path)
-        with conn:
-            cursor = conn.cursor()
+        config = DatabaseConfig(db_path)
+        conn = config.get_connection()
+        with conn as db_conn:
+            cursor = db_conn.cursor()
             cursor.execute("SELECT 1")
             result = cursor.fetchone()
             return Result.success(data={
@@ -56,8 +61,19 @@ def check_database_connection(db_path):
                 "db_path": db_path,
                 "test_result": result[0] if result else None})
     except Exception as e:
-        return Result.failure(error=str(e), metadata={"db_path": db_path})
-    
+        return Result.error(error=str(e), metadata={"db_path": db_path})
+
+def handle_db_errors(operation_name: str):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                return Result.error(f"Failed to {operation_name}: {str(e)}")
+        return wrapper
+    return decorator 
+
 # Veritabanı fonksiyonları
 def create_all_tables(db_path):
     try:
