@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     type TEXT NOT NULL,
     script TEXT,
     params TEXT,
-    FOREIGN KEY (workflow_id) REFERENCES workflows (id)
+    FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
 )
 """
 
@@ -31,9 +31,9 @@ CREATE TABLE IF NOT EXISTS edges (
     from_node_id TEXT NOT NULL,
     to_node_id TEXT NOT NULL,
     condition_type TEXT DEFAULT 'success',
-    FOREIGN KEY (workflow_id) REFERENCES workflows (id),
-    FOREIGN KEY (from_node_id) REFERENCES nodes (id),
-    FOREIGN KEY (to_node_id) REFERENCES nodes (id)
+    FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE,
+    FOREIGN KEY (from_node_id) REFERENCES nodes (id) ON DELETE CASCADE,
+    FOREIGN KEY (to_node_id) REFERENCES nodes (id) ON DELETE CASCADE
 )
 """
 
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS executions (
     results TEXT DEFAULT '{}',
     started_at TEXT DEFAULT CURRENT_TIMESTAMP,
     ended_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (workflow_id) REFERENCES workflows (id)
+    FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
 )
 """
 
@@ -57,8 +57,8 @@ CREATE TABLE IF NOT EXISTS execution_queue (
     status TEXT DEFAULT 'pending',
     priority INTEGER DEFAULT 0,
     dependency_count NUMBER,
-    FOREIGN KEY (execution_id) REFERENCES executions (id),
-    FOREIGN KEY (node_id) REFERENCES nodes (id)
+    FOREIGN KEY (execution_id) REFERENCES executions (id) ON DELETE CASCADE,
+    FOREIGN KEY (node_id) REFERENCES nodes (id) ON DELETE CASCADE
 )
 """
 
@@ -72,8 +72,8 @@ CREATE TABLE IF NOT EXISTS execution_results (
     error_message TEXT,
     started_at TEXT,
     ended_at TEXT,
-    FOREIGN KEY (execution_id) REFERENCES executions (id),
-    FOREIGN KEY (node_id) REFERENCES nodes (id)
+    FOREIGN KEY (execution_id) REFERENCES executions (id) ON DELETE CASCADE,
+    FOREIGN KEY (node_id) REFERENCES nodes (id) ON DELETE CASCADE
 )
 """
 
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS triggers (
     trigger_type TEXT NOT NULL,
     config TEXT DEFAULT '{}',
     is_active INTEGER DEFAULT 1,
-    FOREIGN KEY (workflow_id) REFERENCES workflows (id)
+    FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
 )
 """
 
