@@ -4,6 +4,7 @@ import threading
 from .. import database
 from .queue_monitoring import QueueMonitor
 from .result_monitoring import ResultMonitor
+from ..parallelism_engine import Manager
 
 
 class WorkflowScheduler:
@@ -19,10 +20,12 @@ class WorkflowScheduler:
         self.db_path = db_path
         self.queue_polling_interval = queue_polling_interval
         self.result_polling_interval = result_polling_interval
-        
+
+        self.manager = Manager()
+
         # Monitor nesneleri
-        self.queue_monitor = QueueMonitor(db_path, queue_polling_interval)
-        self.result_monitor = ResultMonitor(db_path, result_polling_interval)
+        self.queue_monitor = QueueMonitor(db_path, queue_polling_interval, self.manager)
+        self.result_monitor = ResultMonitor(db_path, result_polling_interval, self.manager)
         
         # Scheduler durumu
         self.running = False

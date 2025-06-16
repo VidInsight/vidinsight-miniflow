@@ -10,7 +10,7 @@ class ResultMonitor:
     Amaç: Execution sonuçlarını alır ve workflow orchestration'a besler
     """
     
-    def __init__(self, db_path, polling_interval=5):
+    def __init__(self, db_path, polling_interval=5, manager=None):
         """
         Amaç: Result monitor'u başlatır
         Döner: Yok (constructor)
@@ -19,6 +19,7 @@ class ResultMonitor:
         self.polling_interval = polling_interval
         self.running = False
         self.thread = None
+        self.manager = manager
 
     def start(self):
         """
@@ -36,6 +37,7 @@ class ResultMonitor:
         self.running = True
         self.thread = threading.Thread(target=self.execution_loop, daemon=True)
         self.thread.start()
+        print("[ResultMonitor] Başlatıldı.")
         return True
 
     def stop(self):
@@ -49,6 +51,7 @@ class ResultMonitor:
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=5)
+        print("[ResultMonitor] Durduruldu.")
 
     def is_running(self):
         """
@@ -62,23 +65,21 @@ class ResultMonitor:
         Amaç: Ana result monitoring döngüsü
         Döner: Yok (sonsuz döngü)
         """
+        print("[ResultMonitor] execution_loop başladı.")
         while self.running:
             try:
                 # Output queue'dan sonuçları al
-                results = self.get_from_output_queue()
-                
-                # Her sonucu işle
-                for result in results:
-                    if not self.running:
-                        break
+                result = self.get_from_output_queue()
+                print(f"[ResultMonitor] Output queue'dan alınan result: {result}")
                     
-                    # Sonucu workflow orchestration'a besle
-                    self.process_result(result)
+                # Sonucu workflow orchestration'a besle
+                self.process_result(result)
                 
                 # Polling interval bekle
                 time.sleep(self.polling_interval)
                 
-            except Exception:
+            except Exception as e:
+                print(f"[ResultMonitor] execution_loop hata: {e}")
                 time.sleep(1)
 
     def get_from_output_queue(self):
@@ -90,8 +91,10 @@ class ResultMonitor:
         Şu anda boş liste döner (placeholder)
         """
         # Placeholder implementation
+        result = self.manager.get_output_item()
+        print(f"[ResultMonitor] get_output_item çağrıldı: {result}")
         # Gerçek implementasyonda burası output queue'yu okuyacak
-        return []
+        return result
 
     def process_result(self, result):
         """
@@ -104,18 +107,22 @@ class ResultMonitor:
         - Hata durumunda workflow'u sonlandırır
         - Tamamlanma kontrolü yapar
         """
+        print(f"[ResultMonitor] process_result çağrıldı: {result}")
         try:
             # Result format validation
             required_fields = ['execution_id', 'node_id', 'status']
             for field in required_fields:
                 if field not in result:
+                    print(f"[ResultMonitor] Eksik alan: {field}")
                     return False
             
             # Status validation
             if result['status'] not in ['success', 'failed']:
+                print(f"[ResultMonitor] Geçersiz status: {result['status']}")
                 return False
             
             # Workflow orchestration'a besle
+            print(f"[ResultMonitor] process_execution_result çağrılıyor...")
             orchestration_result = process_execution_result(
                 db_path=self.db_path,
                 execution_id=result["execution_id"],
@@ -124,10 +131,12 @@ class ResultMonitor:
                 result_data=result.get("result_data"),
                 error_message=result.get("error_message")
             )
+            print(f"[ResultMonitor] process_execution_result sonucu: {orchestration_result}")
             
             return orchestration_result.success
             
-        except Exception:
+        except Exception as e:
+            print(f"[ResultMonitor] process_result hata: {e}")
             return False
 
     def process_results(self, results):
