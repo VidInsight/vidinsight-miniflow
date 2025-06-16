@@ -179,8 +179,18 @@ class QueueMonitor:
             # Context oluştur (updated context manager ile execution_results query)
             params_dict = database.safe_json_loads(node_info.get('params', '{}'))
             print("--------------------------------")
-            print(f"[QueueMonitor] Params dict: {params_dict}")
-            for key, value in json.loads(params_dict).items():
+            print(f"[QueueMonitor] Raw params: {params_dict}")
+            
+            # Handle double-encoded JSON
+            if isinstance(params_dict, str):
+                try:
+                    params_dict = json.loads(params_dict)
+                except json.JSONDecodeError as e:
+                    print(f"[QueueMonitor] Failed to parse params JSON: {e}")
+                    return False
+            
+            print(f"[QueueMonitor] Parsed params: {params_dict}")
+            for key, value in params_dict.items():
                 print(f"[QueueMonitor] {key}: {value}")
                 print(f"[QueueMonitor] {type(key)}: {type(value)}")
             print("--------------------------------")

@@ -19,8 +19,11 @@ from .scheduler import (
     WorkflowScheduler,
     create_scheduler,
     create_context_for_task,
-    replace_placeholders,
-    extract_placeholders
+    create_context,
+    extract_dynamic_values,
+    split_variable_path,
+    find_node_id,
+    get_result_data_for_node
 )
 
 # Version
@@ -39,8 +42,11 @@ __all__ = [
     
     # Context management
     'create_context_for_task',
-    'replace_placeholders',
-    'extract_placeholders',
+    'create_context',
+    'extract_dynamic_values',
+    'split_variable_path',
+    'find_node_id',
+    'get_result_data_for_node',
     
     # Version
     '__version__'
