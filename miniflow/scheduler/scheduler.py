@@ -86,7 +86,9 @@ class WorkflowScheduler:
         
         # Health monitoring'i durdur
         self.stop_health_monitoring()
-        
+
+        self.manager.shutdown()
+
         # Sequential shutdown - Result monitor önce durur
         try:
             self.result_monitor.stop()

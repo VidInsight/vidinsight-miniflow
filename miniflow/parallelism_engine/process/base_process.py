@@ -17,15 +17,6 @@ class BaseProcess:
         # Lock'ları process içinde oluşturacağız - pickle issue
         self.process = Process(target=self.run_process, args=(self.pipe, self.output_queue))
 
-    def get_thread_count(self):
-        # Bu method sadece process içinde çağrılacak
-        if hasattr(self, 'lock'):
-            with self.lock:
-                # Önce ölü thread'leri temizle
-                self._cleanup_dead_threads()
-                return len(self.threads)
-        return 0
-
     def _cleanup_dead_threads(self):
         """Bitmiş thread'leri listeden çıkar"""
         if hasattr(self, 'threads'):
@@ -48,6 +39,7 @@ class BaseProcess:
         def thread_controller():
             while not self.shutdown_event.is_set():
                 try:
+                    self._cleanup_dead_threads()
                     # Pipe'tan yeni komut var mı kontrol et
                     if pipe.poll():
                         command_data = pipe.recv()  # pipe üzerinden komutu al
@@ -63,6 +55,9 @@ class BaseProcess:
                         elif command_data["command"] == "shutdown":
                             self.shutdown_event.set()
                             break
+
+                        elif command_data["command"] == "get_thread_count":
+                            pipe.send({"thread_count": len(self.threads)})
                             
                 except Exception as e:
                     output_queue.put({"error": f"Thread controller error: {e}"})
@@ -88,7 +83,7 @@ class BaseProcess:
             with self.lock:
                 self.threads.append(thread)
                 # Periyodik temizlik
-                if len(self.threads) > 10:  # Threshold
+                if len(self.threads) > 3:  # Threshold
                     self._cleanup_dead_threads()
 
     def shutdown(self):

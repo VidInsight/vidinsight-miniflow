@@ -37,7 +37,7 @@ class ResultMonitor:
         self.running = True
         self.thread = threading.Thread(target=self.execution_loop, daemon=True)
         self.thread.start()
-        print("[ResultMonitor] Başlatıldı.")
+        #print("[ResultMonitor] Başlatıldı.")
         return True
 
     def stop(self):
@@ -65,12 +65,12 @@ class ResultMonitor:
         Amaç: Ana result monitoring döngüsü
         Döner: Yok (sonsuz döngü)
         """
-        print("[ResultMonitor] execution_loop başladı.")
+        #print("[ResultMonitor] execution_loop başladı.")
         while self.running:
             try:
                 # Output queue'dan sonuçları al
                 result = self.get_from_output_queue()
-                print(f"[ResultMonitor] Output queue'dan alınan result: {result}")
+                #print(f"[ResultMonitor] Output queue'dan alınan result: {result}")
                     
                 # Sonucu workflow orchestration'a besle
                 self.process_result(result)
@@ -79,7 +79,7 @@ class ResultMonitor:
                 time.sleep(self.polling_interval)
                 
             except Exception as e:
-                print(f"[ResultMonitor] execution_loop hata: {e}")
+                #print(f"[ResultMonitor] execution_loop hata: {e}")
                 time.sleep(1)
 
     def get_from_output_queue(self):
@@ -92,7 +92,7 @@ class ResultMonitor:
         """
         # Placeholder implementation
         result = self.manager.get_output_item()
-        print(f"[ResultMonitor] get_output_item çağrıldı: {result}")
+        #print(f"[ResultMonitor] get_output_item çağrıldı: {result}")
         # Gerçek implementasyonda burası output queue'yu okuyacak
         return result
 
@@ -107,22 +107,22 @@ class ResultMonitor:
         - Hata durumunda workflow'u sonlandırır
         - Tamamlanma kontrolü yapar
         """
-        print(f"[ResultMonitor] process_result çağrıldı: {result}")
+        #print(f"[ResultMonitor] process_result çağrıldı: {result}")
         try:
             # Result format validation
             required_fields = ['execution_id', 'node_id', 'status']
             for field in required_fields:
                 if field not in result:
-                    print(f"[ResultMonitor] Eksik alan: {field}")
+                    #print(f"[ResultMonitor] Eksik alan: {field}")
                     return False
             
             # Status validation
             if result['status'] not in ['success', 'failed']:
-                print(f"[ResultMonitor] Geçersiz status: {result['status']}")
+                #print(f"[ResultMonitor] Geçersiz status: {result['status']}")
                 return False
             
             # Workflow orchestration'a besle
-            print(f"[ResultMonitor] process_execution_result çağrılıyor...")
+            #print(f"[ResultMonitor] process_execution_result çağrılıyor...")
             orchestration_result = process_execution_result(
                 db_path=self.db_path,
                 execution_id=result["execution_id"],
@@ -131,12 +131,12 @@ class ResultMonitor:
                 result_data=result.get("result_data"),
                 error_message=result.get("error_message")
             )
-            print(f"[ResultMonitor] process_execution_result sonucu: {orchestration_result}")
+            #print(f"[ResultMonitor] process_execution_result sonucu: {orchestration_result}")
             
             return orchestration_result.success
             
         except Exception as e:
-            print(f"[ResultMonitor] process_result hata: {e}")
+            #print(f"[ResultMonitor] process_result hata: {e}")
             return False
 
     def process_results(self, results):

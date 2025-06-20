@@ -46,7 +46,7 @@ class QueueMonitor:
         self.running = True
         self.thread = threading.Thread(target=self.execution_loop, daemon=True)
         self.thread.start()
-        print("[QueueMonitor] Başlatıldı.")
+        #print("[QueueMonitor] Başlatıldı.")
         return True
 
     def stop(self):
@@ -105,11 +105,11 @@ class QueueMonitor:
             if limit and len(all_ready_tasks) > limit:
                 all_ready_tasks = all_ready_tasks[:limit]
 
-            print(f"[QueueMonitor] Ready task sayısı: {len(all_ready_tasks)}")
+            #print(f"[QueueMonitor] Ready task sayısı: {len(all_ready_tasks)}")
             return all_ready_tasks
 
         except Exception as e:
-            print(f"[QueueMonitor] get_ready_tasks hata: {e}")
+            #print(f"[QueueMonitor] get_ready_tasks hata: {e}")
             return []
 
     def reorder_queue(self):
@@ -120,7 +120,7 @@ class QueueMonitor:
         result = database.reorder_execution_queue(self.db_path)
 
         if result.success:
-            print(f"[QueueMonitor] Queue reorder: {result.data.get('ready_count', 0)} task ready oldu.")
+            #print(f"[QueueMonitor] Queue reorder: {result.data.get('ready_count', 0)} task ready oldu.")
             return result.data.get('ready_count', 0)
         return 0
 
@@ -129,7 +129,7 @@ class QueueMonitor:
         Amaç: Ana monitoring döngüsü
         Döner: Yok (sonsuz döngü)
         """
-        print("[QueueMonitor] execution_loop başladı.")
+        #print("[QueueMonitor] execution_loop başladı.")
         while self.running:
             try:
                 # Queue'yu düzenle
@@ -143,7 +143,7 @@ class QueueMonitor:
                     if not self.running:
                         break
 
-                    print(f"[QueueMonitor] Task işleniyor: {task}")
+                    #print(f"[QueueMonitor] Task işleniyor: {task}")
                     # Task'ı running olarak işaretle
                     database.mark_task_as_running(self.db_path, task['id'])
 
@@ -154,7 +154,7 @@ class QueueMonitor:
                 time.sleep(self.polling_interval)
 
             except Exception as e:
-                print(f"[QueueMonitor] execution_loop hata: {e}")
+                #print(f"[QueueMonitor] execution_loop hata: {e}")
                 time.sleep(1)
 
     def process_task(self, task):
@@ -162,7 +162,7 @@ class QueueMonitor:
         Amaç: Tek bir task'ı işler
         Döner: İşlem başarı durumu (True/False)
         """
-        print(f"[QueueMonitor] process_task çağrıldı: {task}")
+        #print(f"[QueueMonitor] process_task çağrıldı: {task}")
         try:
             task_id = task['id']
             node_id = task['node_id']
@@ -171,29 +171,29 @@ class QueueMonitor:
             # Node bilgilerini al
             node_result = database.get_node(self.db_path, node_id)
             if not node_result.success:
-                print(f"[QueueMonitor] Node alınamadı: {node_id}")
+                #print(f"[QueueMonitor] Node alınamadı: {node_id}")
                 return False
 
             node_info = node_result.data
 
             # Context oluştur (updated context manager ile execution_results query)
             params_dict = database.safe_json_loads(node_info.get('params', '{}'))
-            print("--------------------------------")
-            print(f"[QueueMonitor] Raw params: {params_dict}")
+            #print("--------------------------------")
+            #print(f"[QueueMonitor] Raw params: {params_dict}")
             
             # Handle double-encoded JSON
             if isinstance(params_dict, str):
                 try:
                     params_dict = json.loads(params_dict)
                 except json.JSONDecodeError as e:
-                    print(f"[QueueMonitor] Failed to parse params JSON: {e}")
+                    #print(f"[QueueMonitor] Failed to parse params JSON: {e}")
                     return False
             
-            print(f"[QueueMonitor] Parsed params: {params_dict}")
+            """print(f"[QueueMonitor] Parsed params: {params_dict}")
             for key, value in params_dict.items():
                 print(f"[QueueMonitor] {key}: {value}")
                 print(f"[QueueMonitor] {type(key)}: {type(value)}")
-            print("--------------------------------")
+            print("--------------------------------")"""
 
             processed_context = context_manager.create_context_for_task(
                 params_dict, execution_id, self.db_path
@@ -210,21 +210,21 @@ class QueueMonitor:
                 "node_type": node_info['type']
             }
 
-            print(f"[QueueMonitor] Task payload input queue'ya gönderiliyor: {task_payload}")
+            #print(f"[QueueMonitor] Task payload input queue'ya gönderiliyor: {task_payload}")
             # Task'ı input queue'ya gönder
             send_success = self.send_to_input_queue(task_payload)
 
             if send_success:
                 # Sadece başarılı gönderimden sonra sil
                 delete_result = database.delete_task(self.db_path, task_id)
-                print(f"[QueueMonitor] Task input queue'ya gönderildi ve silindi: {task_id}")
+                #print(f"[QueueMonitor] Task input queue'ya gönderildi ve silindi: {task_id}")
                 return delete_result.success
             else:
-                print(f"[QueueMonitor] Task input queue'ya gönderilemedi: {task_id}")
+                #print(f"[QueueMonitor] Task input queue'ya gönderilemedi: {task_id}")
                 return False
 
         except Exception as e:
-            print(f"[QueueMonitor] process_task hata: {e}")
+            #print(f"[QueueMonitor] process_task hata: {e}")
             return False
 
     def send_to_input_queue(self, task_payload):
@@ -236,11 +236,11 @@ class QueueMonitor:
         Gerçek sistemde burası execution engine'e gönderecek.
         """
         try:
-            print(f"[QueueMonitor] send_to_input_queue çağrıldı: {task_payload}")
+            #print(f"[QueueMonitor] send_to_input_queue çağrıldı: {task_payload}")
             self.manager.put_item(task_payload)
-            print(f"[QueueMonitor] put_item başarılı.")
+            #print(f"[QueueMonitor] put_item başarılı.")
             return True
 
         except Exception as e:
-            print(f"[QueueMonitor] send_to_input_queue hata: {e}")
+            #print(f"[QueueMonitor] send_to_input_queue hata: {e}")
             return False

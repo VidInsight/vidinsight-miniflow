@@ -1,21 +1,27 @@
 import json
 import threading
+import time
 from multiprocessing import cpu_count, Pipe
 from threading import Thread
 from ..process import BaseProcess
 from ..queue_module import BaseQueue
+import psutil
 
 
 class QueueWatcher:
-    def __init__(self, input_queue: BaseQueue, output_queue: BaseQueue):
+    def __init__(self, input_queue: BaseQueue, output_queue: BaseQueue, os: bool):
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.cpu_count = cpu_count() - 1
+        self.max_cpu_count = cpu_count() - 1
+        self.min_process_count = 1
         self.active_processes = []
         self.started = False
+        self.scaler_thread = None
         self.shutdown_event = threading.Event()
         self.process_lock = threading.Lock()
         self.current_process_index = 0  # Round-robin selection
+        self.priority = -19 if os else psutil.HIGH_PRIORITY_CLASS  # self._unix_process_classes() if os else self._nt_process_classes()
+        print(f"QueueWatcher started with priority {self.priority}")
 
     def start(self):
         """Sadece bir kez başlatılabilir"""
@@ -23,10 +29,11 @@ class QueueWatcher:
             raise RuntimeError("QueueWatcher already started")
 
         self.started = True
-        self._start_processes()  # Sadece burada başlat
+        self._start_processes(self.min_process_count)  # Sadece burada başlat
         self._start_watch_threads(self._watch_input)
 
     def _watch_input(self):
+        """Input Queue tracker"""
         while not self.shutdown_event.is_set():
             try:
                 # Non-blocking get with timeout
@@ -42,6 +49,22 @@ class QueueWatcher:
             except Exception as e:
                 print(f"Input watcher error: {e}")
 
+    def _get_process_thread_counts(self):
+        thread_counts = []
+        with self.process_lock:
+            for proc_dict in self.active_processes:
+                try:
+                    proc_dict['pipe'].send({"command": "get_thread_count"})
+                    if proc_dict['pipe'].poll():  # 1 sn timeout
+                        resp = proc_dict['pipe'].recv()
+                        thread_counts.append(resp.get("thread_count", 0))
+                    else:
+                        thread_counts.append(None)
+                except Exception as e:
+                    print(f"Error getting thread count: {e}")
+                    thread_counts.append(None)
+        return thread_counts
+
     def _get_next_process(self):
         """Round-robin process selection"""
         if not self.active_processes:
@@ -51,25 +74,27 @@ class QueueWatcher:
         self.current_process_index = (self.current_process_index + 1) % len(self.active_processes)
         return process
 
-    def _watch_output(self):
-        while not self.shutdown_event.is_set():
-            try:
-                """item = self.output_queue.get_with_timeout(timeout=1.0)
-                if item is not None:
-                    print(item)"""
-                pass
-            except Exception as e:
-                print(f"Output watcher error: {e}")
-
-    def _start_processes(self):
-        for p_count in range(self.cpu_count):
+    def _start_processes(self, count):
+        for _ in range(count):
             parent_conn, child_conn = Pipe()
             process = BaseProcess(child_conn, self.output_queue)
             process.start()
+            self._set_process_priority(process.process.pid, self.priority)
+            print(f"[QUEUEWATCHER] Starting process {process.process.pid}")
             self.active_processes.append({
                 'process': process,
                 'pipe': parent_conn
             })
+
+    def _stop_processes(self, count):
+        with self.process_lock:
+            for _ in range(min(count, len(self.active_processes) - self.min_process_count)):
+                p = self.active_processes.pop()
+                try:
+                    p['pipe'].send({'command': 'shutdown'})
+                    p['process'].shutdown()
+                except Exception as e:
+                    print(f"Error shutting down process: {e}")
 
     def _create_thread(self, item: json):
         process = self._get_next_process()
@@ -86,6 +111,27 @@ class QueueWatcher:
         }
         process.get("pipe").send(command_data)
 
+    def _auto_scale_processes(self):
+        while not self.shutdown_event.is_set():
+            try:
+                queue_size = self.input_queue.qsize() if hasattr(self.input_queue, 'qsize') else None
+                cpu_usage = psutil.cpu_percent(interval=1)
+                thread_counts = self._get_process_thread_counts()
+                avg_threads = sum(t for t in thread_counts if t is not None) / max(1, len(thread_counts))
+                print(self._get_process_thread_counts())
+                if len(self.active_processes) < self.max_cpu_count and avg_threads > 2:
+                    print("[Parallelism Engine] Scaling up processes")
+                    self._start_processes(1)
+
+                elif cpu_usage < 30 and len(self.active_processes) > self.min_process_count and avg_threads < 1:
+                    print("[Parallelism Engine] Scaling down processes")
+                    self._stop_processes(1)
+
+            except Exception as e:
+                print(f"Scaler error: {e}")
+
+            time.sleep(1)
+
     def shutdown(self):
         """Graceful shutdown"""
         self.shutdown_event.set()
@@ -101,3 +147,22 @@ class QueueWatcher:
     def _start_watch_threads(self, input_func: callable):
         input_thread = Thread(target=input_func, daemon=True)
         input_thread.start()
+
+        self.scaler_thread = threading.Thread(target=self._auto_scale_processes, daemon=True)
+        self.scaler_thread.start()
+
+    def _set_process_priority(self, pid: int, priority):
+        """Setting process priority"""
+        ps_process = psutil.Process(pid)
+        ps_process.nice(priority)
+        return True
+
+    def _nt_process_classes(self):
+        """Windows process priority classes"""
+        return [psutil.IDLE_PRIORITY_CLASS, psutil.BELOW_NORMAL_PRIORITY_CLASS,
+                psutil.NORMAL_PRIORITY_CLASS, psutil.ABOVE_NORMAL_PRIORITY_CLASS,
+                psutil.HIGH_PRIORITY_CLASS, psutil.REALTIME_PRIORITY_CLASS]
+
+    def _unix_process_classes(self):
+        """Unix based systems process priority range (-20 max priority, 20 min priority)"""
+        return [i for i in range(-20, 21)]

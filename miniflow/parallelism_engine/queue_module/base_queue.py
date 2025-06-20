@@ -34,5 +34,8 @@ class BaseQueue:
     def is_empty(self):
         return self.q.empty()
 
+    def size(self):
+        return self.q.qsize()
+
 
 

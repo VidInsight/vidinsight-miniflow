@@ -4,6 +4,7 @@ import json
 import atexit
 import signal
 import sys
+import platform
 
 
 class Manager:
@@ -19,7 +20,7 @@ class Manager:
 
     def start(self):
         if not self.started:
-            self.watcher = QueueWatcher(self.input_queue, self.output_queue)
+            self.watcher = QueueWatcher(self.input_queue, self.output_queue, False if platform.system() == "Windows" else True)
             self.watcher.start()
             self.started = True
 
