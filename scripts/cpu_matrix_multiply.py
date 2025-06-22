@@ -150,8 +150,7 @@ class CPUMatrixMultiplier:
             iterations = context.get("iterations", 10) if context else 10
             prime_count = context.get("prime_count", 1000) if context else 1000
             
-            print(f"🚀 CPU Matrix Multiplier Starting")
-            print(f"📊 Parameters: size={matrix_size}, iterations={iterations}, prime_count={prime_count}")
+
             
             # Execute CPU intensive matrix operations
             result = self.matrix_operations(matrix_size, iterations, prime_count)

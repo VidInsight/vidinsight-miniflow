@@ -304,8 +304,7 @@ class CPUFinalAggregator:
             fibonacci_sum = context.get("fibonacci_sum", 123456789.0) if context else 123456789.0
             hash_result = context.get("hash_result", "default_hash_result_string") if context else "default_hash_result_string"
             
-            print(f"🚀 CPU Final Aggregator Starting")
-            print(f"📊 Aggregating results from all previous CPU intensive tasks")
+
             
             # Execute final CPU intensive aggregation
             result = self.aggregate_all_results(prime_count, matrix_ops, fibonacci_sum, hash_result)

@@ -231,15 +231,21 @@ class QueueWatcher:
                 avg_threads = sum(valid_counts) / len(valid_counts)
                 max_threads = max(valid_counts)
                 
-                print(f"[AUTO-SCALER] Processes: {process_count}, CPU: {cpu_usage:.1f}%, "
-                      f"Avg Threads: {avg_threads:.1f}, Max: {max_threads}")
+                # Only log when there's actual activity or significant changes
+                should_log = (avg_threads > 0.1 or max_threads > 0 or 
+                            cpu_usage > 50 or current_time - getattr(self, '_last_log_time', 0) > 30)
+                
+                if should_log:
+                    print(f"[AUTO-SCALER] Processes: {process_count}, CPU: {cpu_usage:.1f}%, "
+                          f"Threads: {avg_threads:.1f}(avg)/{max_threads}(max)")
+                    self._last_log_time = current_time
                 
                 # CONSERVATIVE scaling logic (prevents thrashing)
                 if (process_count < self.max_cpu_count and 
                     (avg_threads > 2.5 or max_threads > 4) and
                     cpu_usage < 90):  # Don't scale up if CPU maxed
                     
-                    print("[AUTO-SCALER] Scaling UP (1 process)")
+                    print("[AUTO-SCALER] 📈 Scaling UP (1 process)")
                     self._start_processes(1)
                     last_action_time = current_time
                     
@@ -247,14 +253,14 @@ class QueueWatcher:
                       avg_threads < 0.3 and 
                       cpu_usage < 20):
                     
-                    print("[AUTO-SCALER] Scaling DOWN (1 process)")
+                    print("[AUTO-SCALER] 📉 Scaling DOWN (1 process)")
                     self._stop_processes(1)
                     last_action_time = current_time
                 
             except Exception as e:
                 print(f"[AUTO-SCALER] Error: {e}")
             
-            time.sleep(2)  # Conservative polling
+            time.sleep(5)  # Reduced polling frequency
 
     def _background_cleanup(self):
         """SAFE: Non-intrusive background cleanup"""
@@ -335,8 +341,8 @@ class QueueWatcher:
             ps_process = psutil.Process(pid)
             ps_process.nice(priority)
             return True
-        except (psutil.AccessDenied, PermissionError) as e:
-            print(f"[QueueWatcher] Priority ayarlanamadı (normal): {e}")
+        except (psutil.AccessDenied, PermissionError):
+            # Silent fail - this is normal on some systems
             return False
         except Exception as e:
             print(f"[QueueWatcher] Priority ayarlama hatası: {e}")

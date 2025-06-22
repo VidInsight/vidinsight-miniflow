@@ -4,7 +4,7 @@ class MultiplyNumbers:
     def __init__(self):
         self.name = "Multiply Numbers Calculator"
     
-    def run(self):
+    def run(self, params=None):
         """
         İki sayıyı çarpar ve JSON formatında sonuç döner
         """

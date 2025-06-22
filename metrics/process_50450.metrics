@@ -1,0 +1,28 @@
+{"pid": 50450, "start_time": 1750630195.4360719, "start_datetime": "2025-06-23T01:09:55.436074", "type": "process_info"}
+{"timestamp": 1750630195.4687612, "datetime": "2025-06-23T01:09:55.468761", "component": "queue", "metric_type": "status", "value": "initialized", "process_id": 50450, "type": "metric", "details": {"maxsize": 1000, "created_at": 1750630195.468759}}
+{"timestamp": 1750630195.468853, "datetime": "2025-06-23T01:09:55.468853", "component": "queue", "metric_type": "status", "value": "initialized", "process_id": 50450, "type": "metric", "details": {"maxsize": 1000, "created_at": 1750630195.468852}}
+{"timestamp": 1750630195.468964, "datetime": "2025-06-23T01:09:55.468964", "component": "scheduler", "metric_type": "status", "value": "initialized", "process_id": 50450, "type": "metric", "details": {"parallel_mode": true, "batch_size": 25, "worker_threads": 4}}
+{"timestamp": 1750630195.470112, "datetime": "2025-06-23T01:09:55.470112", "component": "scheduler", "metric_type": "status", "value": "running", "process_id": 50450, "type": "metric", "details": {"mode": "parallel", "start_time": 1750630195.4689631}}
+{"timestamp": 1750630324.5010219, "datetime": "2025-06-23T01:12:04.501022", "component": "engine", "metric_type": "status", "value": "initialized", "process_id": 50450, "type": "metric", "details": {"initial_process_count": true, "max_processes": 8, "auto_scale_enabled": true}}
+{"timestamp": 1750630324.5013828, "datetime": "2025-06-23T01:12:04.501383", "component": "engine", "metric_type": "status", "value": "failed_to_start", "process_id": 50450, "type": "metric", "details": {"error": "initial_processes_failed"}}
+{"timestamp": 1750630324.501481, "datetime": "2025-06-23T01:12:04.501481", "component": "queue", "metric_type": "batch_put", "value": 1, "process_id": 50450, "type": "metric", "details": {"requested": 1, "successful": 1, "failed": 0}}
+{"timestamp": 1750630325.571763, "datetime": "2025-06-23T01:12:05.571763", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630327.682336, "datetime": "2025-06-23T01:12:07.682336", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630329.789985, "datetime": "2025-06-23T01:12:09.789985", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630331.895723, "datetime": "2025-06-23T01:12:11.895723", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630334.002707, "datetime": "2025-06-23T01:12:14.002707", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630336.112867, "datetime": "2025-06-23T01:12:16.112867", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630338.219352, "datetime": "2025-06-23T01:12:18.219352", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630340.328449, "datetime": "2025-06-23T01:12:20.328449", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630342.435988, "datetime": "2025-06-23T01:12:22.435988", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630344.546154, "datetime": "2025-06-23T01:12:24.546154", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630346.653117, "datetime": "2025-06-23T01:12:26.653117", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630348.7585611, "datetime": "2025-06-23T01:12:28.758561", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630350.866267, "datetime": "2025-06-23T01:12:30.866267", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630352.974467, "datetime": "2025-06-23T01:12:32.974467", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630355.084385, "datetime": "2025-06-23T01:12:35.084385", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630357.190016, "datetime": "2025-06-23T01:12:37.190016", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630359.294126, "datetime": "2025-06-23T01:12:39.294126", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630361.402546, "datetime": "2025-06-23T01:12:41.402546", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630363.509055, "datetime": "2025-06-23T01:12:43.509055", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}
+{"timestamp": 1750630365.617708, "datetime": "2025-06-23T01:12:45.617708", "component": "queue", "metric_type": "get_timeout", "value": 1, "process_id": 50450, "type": "metric"}

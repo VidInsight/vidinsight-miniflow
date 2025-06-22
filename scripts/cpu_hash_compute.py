@@ -197,8 +197,7 @@ class CPUHashComputer:
             hash_rounds = context.get("hash_rounds", 1000000) if context else 1000000
             fibonacci_result = context.get("fibonacci_result", 123456789.0) if context else 123456789.0
             
-            print(f"🚀 CPU Hash Computer Starting")
-            print(f"📊 Parameters: rounds={hash_rounds}, fibonacci_result={fibonacci_result}")
+
             
             # Execute CPU intensive hash operations
             result = self.hash_operations(hash_rounds, fibonacci_result)

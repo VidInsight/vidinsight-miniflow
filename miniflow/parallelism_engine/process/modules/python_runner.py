@@ -31,10 +31,7 @@ def python_runner(item: json, output_queue: Queue):
         if isinstance(context, str):
             context = json.loads(context)
 
-        """print(f"[PythonRunner] Context: {context}")
-        for key, value in context.items():
-            print(f"[PythonRunner] {key}: {value}")
-            print(f"[PythonRunner] {type(key)}: {type(value)}")"""
+
 
         result = run_module.run(context)
 

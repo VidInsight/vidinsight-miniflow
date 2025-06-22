@@ -230,15 +230,34 @@ class MiniflowApp:
         print("\n📊 Miniflow System Durumu")
         print("=" * 50)
         
-        # Scheduler durumu - gerçek durumu kontrol et
+        # Scheduler durumu - hem local hem de system-wide kontrol
+        scheduler_active = False
+        
+        # Local instance kontrolü
         if self.scheduler_instance and self.running and self.scheduler_instance.is_running():
+            scheduler_active = True
+        
+        # System-wide process kontrolü (alternatif kontrol)
+        import subprocess
+        try:
+            result = subprocess.run(['pgrep', '-f', 'miniflow.*start'], 
+                                 capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                scheduler_active = True
+        except:
+            pass
+        
+        if scheduler_active:
             print("🚀 Scheduler: Aktif")
-            # Detaylı scheduler durumu
-            status = self.scheduler_instance.get_status()
-            queue_status = "✅" if status.get('queue_monitor_running') else "❌"
-            result_status = "✅" if status.get('result_monitor_running') else "❌"
-            print(f"   Queue Monitor: {queue_status}")
-            print(f"   Result Monitor: {result_status}")
+            if self.scheduler_instance:
+                try:
+                    status = self.scheduler_instance.get_status()
+                    queue_status = "✅" if status.get('queue_monitor_running') else "❌"
+                    result_status = "✅" if status.get('result_monitor_running') else "❌"
+                    print(f"   Queue Monitor: {queue_status}")
+                    print(f"   Result Monitor: {result_status}")
+                except:
+                    print("   (Durum bilgisi alınamadı)")
         else:
             print("🛑 Scheduler: Pasif")
         

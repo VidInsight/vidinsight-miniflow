@@ -189,8 +189,7 @@ class CPUFibonacciCalculator:
             matrix_result = context.get("matrix_result", 1000.0) if context else 1000.0
             iterations = context.get("iterations", 5) if context else 5
             
-            print(f"🚀 CPU Fibonacci Calculator Starting")
-            print(f"📊 Parameters: n={fibonacci_n}, matrix_result={matrix_result}, iterations={iterations}")
+
             
             # Execute CPU intensive Fibonacci operations
             result = self.fibonacci_operations(fibonacci_n, matrix_result, iterations)

@@ -4,7 +4,7 @@ class CalculateAverage:
     def __init__(self):
         self.name = "Average Calculator"
     
-    def run(self):
+    def run(self, params=None):
         """
         Sayıların ortalamasını hesaplar ve JSON formatında sonuç döner
         """
