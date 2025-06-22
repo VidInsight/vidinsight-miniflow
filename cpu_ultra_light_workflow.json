@@ -1,0 +1,52 @@
+{
+  "name": "CPU Ultra Light Test Workflow",
+  "description": "Minimal computation tasks for quick testing",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "name": "cpu_task_1",
+      "type": "task",
+      "script": "cpu_prime_calculator.py",
+      "parameters": {
+        "description": "Calculate prime numbers up to 100",
+        "max_number": 100,
+        "task_duration": 1
+      }
+    },
+    {
+      "name": "cpu_task_2",
+      "type": "task",
+      "script": "cpu_matrix_multiply.py",
+      "parameters": {
+        "description": "Minimal matrix multiplication",
+        "matrix_size": 10,
+        "iterations": 1,
+        "prime_count": "{{cpu_task_1.prime_count}}"
+      }
+    },
+    {
+      "name": "cpu_task_3",
+      "type": "task",
+      "script": "cpu_fibonacci.py",
+      "parameters": {
+        "description": "Calculate tiny Fibonacci numbers",
+        "fibonacci_n": 10,
+        "matrix_result": "{{cpu_task_2.determinant}}",
+        "iterations": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "cpu_task_1",
+      "to": "cpu_task_2",
+      "condition_type": "success"
+    },
+    {
+      "from": "cpu_task_2",
+      "to": "cpu_task_3",
+      "condition_type": "success"
+    }
+  ],
+  "triggers": []
+} 
