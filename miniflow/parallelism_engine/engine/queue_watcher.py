@@ -14,6 +14,7 @@ class QueueWatcher:
         self.output_queue = output_queue
         self.max_cpu_count = cpu_count() - 1
         self.min_process_count = 1
+        self.thread_lock_limit = self.max_cpu_count * 3
         self.active_processes = []
         self.started = False
         self.scaler_thread = None
