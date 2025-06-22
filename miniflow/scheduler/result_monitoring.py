@@ -3,6 +3,7 @@ import threading
 
 from .. import database
 from ..database.functions.workflow_orchestration import process_execution_result
+from ..utils.logger import logger, log_performance
 
 # Webhook functionality removed (API module deleted)
 WEBHOOK_AVAILABLE = False
@@ -40,7 +41,7 @@ class ResultMonitor:
         self.running = True
         self.thread = threading.Thread(target=self.execution_loop, daemon=True)
         self.thread.start()
-        #print("[ResultMonitor] Başlatıldı.")
+        logger.info("ResultMonitor started")
         return True
 
     def stop(self):
@@ -54,7 +55,7 @@ class ResultMonitor:
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=5)
-        print("[ResultMonitor] Durduruldu.")
+        logger.info("ResultMonitor stopped")
 
     def is_running(self):
         """
