@@ -5,6 +5,7 @@ from .. import database
 from .queue_monitoring import QueueMonitor
 from .parallel_queue_monitoring import ParallelQueueMonitor
 from .result_monitoring import ResultMonitor
+from .parallel_result_monitoring import ParallelResultMonitor
 from ..parallelism_engine import Manager
 
 
@@ -36,11 +37,18 @@ class WorkflowScheduler:
                 batch_size, 
                 worker_threads=4
             )
+            # Use parallel result monitor for better performance
+            self.result_monitor = ParallelResultMonitor(
+                db_path, 
+                result_polling_interval, 
+                self.manager, 
+                batch_size=25, 
+                worker_threads=4
+            )
         else:
-            # Use legacy monitor for compatibility
+            # Use legacy monitors for compatibility
             self.queue_monitor = QueueMonitor(db_path, queue_polling_interval, self.manager, batch_size)
-        
-        self.result_monitor = ResultMonitor(db_path, result_polling_interval, self.manager)
+            self.result_monitor = ResultMonitor(db_path, result_polling_interval, self.manager)
         
         # Scheduler durumu
         self.running = False
