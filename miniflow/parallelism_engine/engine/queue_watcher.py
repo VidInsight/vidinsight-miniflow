@@ -14,6 +14,7 @@ class QueueWatcher:
         self.output_queue = output_queue
         self.max_cpu_count = cpu_count() - 1
         self.min_process_count = 1
+        self.thread_lock_limit = self.max_cpu_count * 3
         self.active_processes = []
         self.started = False
         self.scaler_thread = None
@@ -66,13 +67,37 @@ class QueueWatcher:
         return thread_counts
 
     def _get_next_process(self):
-        """Round-robin process selection"""
+        """Select the process with the lowest thread count"""
         if not self.active_processes:
             return None
 
-        process = self.active_processes[self.current_process_index]
-        self.current_process_index = (self.current_process_index + 1) % len(self.active_processes)
-        return process
+        min_threads = float('inf')
+        selected_process = None
+
+        for proc in self.active_processes:
+            try:
+                proc["pipe"].send({"command": "get_thread_count"})
+                if proc["pipe"].poll(timeout=0.1):  # timeout önemli
+                    resp = proc["pipe"].recv()
+                    count = resp.get("thread_count", 0)
+                    if count < min_threads:
+                        min_threads = count
+                        selected_process = proc
+            except Exception as e:
+                print(f"[Process Selection] Error polling thread count: {e}")
+
+        return selected_process or self.active_processes[0]  # fallback
+
+    def _check_process_thread_count(self, process):
+        command_data = {"command": "start_thread"}
+        with self.process_lock:
+            process.get("pipe").send(command_data)
+            if process['pipe'].poll():  # 1 sn timeout
+                resp = process['pipe'].recv()
+                count = resp.get("thread_count", 0)
+                return count
+            else:
+                return 0
 
     def _start_processes(self, count):
         for _ in range(count):
@@ -129,8 +154,6 @@ class QueueWatcher:
 
             except Exception as e:
                 print(f"Scaler error: {e}")
-
-            time.sleep(1)
 
     def shutdown(self):
         """Graceful shutdown"""
