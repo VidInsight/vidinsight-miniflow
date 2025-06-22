@@ -58,3 +58,25 @@ class Manager:
 
     def get_output_item(self):
         return self.output_queue.get_with_timeout(timeout=1.0)
+    
+    def get_output_items_bulk(self, max_items=25, timeout=0.1):
+        """
+        Amaç: Output queue'dan birden fazla item'ı bulk olarak alır
+        Döner: Item listesi
+        
+        Performance optimized version for batch result processing
+        """
+        if not self.started:
+            return []
+        
+        items = []
+        for _ in range(max_items):
+            try:
+                item = self.output_queue.get_with_timeout(timeout=timeout)
+                if item is None:
+                    break
+                items.append(item)
+            except:
+                break
+        
+        return items
