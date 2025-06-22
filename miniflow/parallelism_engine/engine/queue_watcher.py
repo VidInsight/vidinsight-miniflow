@@ -152,10 +152,17 @@ class QueueWatcher:
         self.scaler_thread.start()
 
     def _set_process_priority(self, pid: int, priority):
-        """Setting process priority"""
-        ps_process = psutil.Process(pid)
-        ps_process.nice(priority)
-        return True
+        """Setting process priority (with error handling)"""
+        try:
+            ps_process = psutil.Process(pid)
+            ps_process.nice(priority)
+            return True
+        except (psutil.AccessDenied, PermissionError) as e:
+            print(f"[QueueWatcher] Priority ayarlanamadı (normal): {e}")
+            return False
+        except Exception as e:
+            print(f"[QueueWatcher] Priority ayarlama hatası: {e}")
+            return False
 
     def _nt_process_classes(self):
         """Windows process priority classes"""

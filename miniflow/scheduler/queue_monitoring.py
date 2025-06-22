@@ -137,32 +137,44 @@ class QueueMonitor:
         Amaç: Ana monitoring döngüsü (Batch processing destekli)
         Döner: Yok (sonsuz döngü)
         """
-        print("[QueueMonitor] execution_loop başladı.")
+        print(f"[QueueMonitor] execution_loop başladı (batch_processing: {self.enable_batch_processing}).")
         while self.running:
             try:
                 # Queue'yu düzenle
-                self.reorder_queue()
+                ready_count = self.reorder_queue()
+                print(f"[QueueMonitor] Queue reorder: {ready_count} task ready oldu.")
 
                 # Ready taskları al
                 ready_tasks = self.get_ready_tasks()
+                print(f"[QueueMonitor] Ready task sayısı: {len(ready_tasks)} (batch_processing: {self.enable_batch_processing})")
 
-                # Her task'ı işle
-                for task in ready_tasks:
-                    if not self.running:
-                        break
+                if not ready_tasks:
+                    time.sleep(self.polling_interval)
+                    continue
 
-                    print(f"[QueueMonitor] Task işleniyor: {task}")
-                    # Task'ı running olarak işaretle
-                    database.mark_task_as_running(self.db_path, task['id'])
+                # Batch processing veya single processing
+                if self.enable_batch_processing and len(ready_tasks) >= 2:
+                    # Batch olarak işle
+                    print(f"[QueueMonitor] Batch processing: {len(ready_tasks)} task")
+                    self.process_tasks_batch(ready_tasks)
+                else:
+                    # Tek tek işle
+                    for task in ready_tasks:
+                        if not self.running:
+                            break
 
-                    # Task'ı işle
-                    self.process_task(task)
+                        print(f"[QueueMonitor] Task işleniyor (single): {task}")
+                        # Task'ı running olarak işaretle
+                        database.mark_task_as_running(self.db_path, task['id'])
+
+                        # Task'ı işle
+                        self.process_task(task)
 
                 # Polling interval bekle
                 time.sleep(self.polling_interval)
 
             except Exception as e:
-                #print(f"[QueueMonitor] execution_loop hata: {e}")
+                print(f"[QueueMonitor] execution_loop hata: {e}")
                 time.sleep(1)
 
     def process_task(self, task):

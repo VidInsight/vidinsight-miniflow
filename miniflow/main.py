@@ -72,10 +72,13 @@ class MiniflowApp:
         
         Args:
             background: True ise background thread'de çalışır
+            
+        Returns:
+            bool: Başarı durumu
         """
         if self.scheduler_instance is not None:
             print("⚠️ Scheduler zaten çalışıyor")
-            return
+            return True
         
         try:
             # Batch processing ile scheduler oluştur (batch_size=25)
@@ -89,13 +92,19 @@ class MiniflowApp:
                 )
                 self.scheduler_thread.start()
                 print("🚀 Scheduler background'da başlatıldı")
+                
+                # Background mode'da kısa bir süre bekleyip kontrolü et
+                time.sleep(2)
+                return self.running and self.scheduler_instance is not None
             else:
                 print("🚀 Scheduler başlatılıyor...")
                 self._run_scheduler_loop()
+                return True
                 
         except Exception as e:
             print(f"❌ Scheduler başlatma hatası: {e}")
-            raise
+            self.running = False
+            return False
     
     def _run_scheduler_loop(self):
         """Scheduler ana döngüsü"""
