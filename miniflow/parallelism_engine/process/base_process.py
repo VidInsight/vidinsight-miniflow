@@ -59,6 +59,9 @@ class BaseProcess:
                         elif command_data["command"] == "get_thread_count":
                             pipe.send({"thread_count": len(self.threads)})
                             
+                        elif command_data["command"] == "ping":
+                            pipe.send({"status": "pong"})
+                            
                 except Exception as e:
                     output_queue.put({"error": f"Thread controller error: {e}"})
 
