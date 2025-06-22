@@ -3,6 +3,7 @@ from .core import (
     execute_sql_query,
     fetch_one,
     fetch_all,
+    execute_bulk_operations,
     check_database_connection,
     create_all_tables,
     create_all_indexes,
@@ -11,6 +12,13 @@ from .core import (
     get_table_info,
     get_all_table_info,
     init_database
+)
+
+# Connection pool functions
+from .connection_pool import (
+    initialize_connection_pool,
+    get_connection_pool,
+    close_connection_pool
 )
 
 # Configuration and exceptions
@@ -117,11 +125,22 @@ from .functions.workflow_orchestration import (
     create_workflow_with_components
 )
 
+# Bulk operations for performance optimization  
+from .functions.bulk_operations import (
+    bulk_get_nodes,
+    bulk_get_execution_results,
+    bulk_get_workflow_nodes_mapping,
+    bulk_resolve_contexts
+)
+
 __all__ = [
     # Core functions
-    'execute_sql_query', 'fetch_one', 'fetch_all', 'check_database_connection',
+    'execute_sql_query', 'fetch_one', 'fetch_all', 'execute_bulk_operations', 'check_database_connection',
     'create_all_tables', 'create_all_indexes', 'drop_all_tables', 'check_schema',
     'get_table_info', 'get_all_table_info', 'init_database',
+    
+    # Connection pool functions
+    'initialize_connection_pool', 'get_connection_pool', 'close_connection_pool',
     
     # Configuration and exceptions
     'DatabaseConfig', 'DatabaseConnection', 'DatabaseError', 'Result',
@@ -168,5 +187,8 @@ __all__ = [
     'process_execution_result', 'handle_execution_failure', 'handle_execution_success',
     'complete_execution', 'finalize_execution', 'batch_update_dependencies',
     'trigger_workflow_execution', 'get_execution_status_summary',
-    'get_ready_tasks_for_execution', 'mark_task_as_running', 'create_workflow_with_components'
+    'get_ready_tasks_for_execution', 'mark_task_as_running', 'create_workflow_with_components',
+    
+    # Bulk operations for performance optimization
+    'bulk_get_nodes', 'bulk_get_execution_results', 'bulk_get_workflow_nodes_mapping', 'bulk_resolve_contexts'
 ]
