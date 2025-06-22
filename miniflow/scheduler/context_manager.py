@@ -1,6 +1,6 @@
 import re
 import json
-from ..database.core import fetch_one, Result
+from ..database.core import fetch_one, fetch_all, Result
 from ..database.schema import ALL_TABLES
 from ..utils.logger import logger
 
