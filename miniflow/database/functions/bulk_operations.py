@@ -211,4 +211,67 @@ def bulk_resolve_contexts(db_path, execution_id, tasks_with_params):
         
         resolved_contexts.append(resolved_params)
     
-    return Result.success(resolved_contexts) 
+    return Result.success(resolved_contexts)
+
+
+@handle_db_errors("bulk process execution results")
+def bulk_process_execution_results(db_path, results_data):
+    """
+    Bulk process multiple execution results
+    
+    Args:
+        db_path: Database path
+        results_data: List of result dictionaries with keys:
+                     - execution_id, node_id, status, result_data, error_message
+    
+    Returns:
+        Result with processed count
+    """
+    import json
+    from ..utils import generate_timestamp
+    
+    if not results_data:
+        return Result.success({'processed_count': 0})
+    
+    # Prepare bulk operations for execution_results table
+    bulk_operations = []
+    
+    for result in results_data:
+        execution_id = result.get('execution_id')
+        node_id = result.get('node_id')
+        status = result.get('status')
+        result_data = result.get('result_data')
+        error_message = result.get('error_message')
+        
+        # Validate required fields
+        if not all([execution_id, node_id, status]):
+            continue
+        
+        # Prepare result data for database
+        result_data_json = json.dumps(result_data) if result_data else None
+        
+        # Insert into execution_results
+        bulk_operations.append({
+            'type': 'insert',
+            'query': '''
+                INSERT OR REPLACE INTO execution_results 
+                (execution_id, node_id, status, result_data, error_message, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''',
+            'params': (
+                execution_id,
+                node_id,
+                status,
+                result_data_json,
+                error_message,
+                generate_timestamp()
+            )
+        })
+    
+    # Execute bulk operations
+    bulk_result = execute_bulk_operations(db_path, bulk_operations)
+    
+    if bulk_result.success:
+        return Result.success({'processed_count': len(bulk_operations)})
+    else:
+        return Result.error(f"Bulk result processing failed: {bulk_result.error}") 
