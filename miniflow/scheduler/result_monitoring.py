@@ -4,6 +4,9 @@ import threading
 from .. import database
 from ..database.functions.workflow_orchestration import process_execution_result
 
+# Webhook functionality removed (API module deleted)
+WEBHOOK_AVAILABLE = False
+
 
 class ResultMonitor:
     """
@@ -106,10 +109,20 @@ class ResultMonitor:
         - Başarı durumunda bağımlılıkları günceller
         - Hata durumunda workflow'u sonlandırır
         - Tamamlanma kontrolü yapar
+        - Webhook bildirim gönderir (eğer workflow tamamlandıysa)
         """
         #print(f"[ResultMonitor] process_result çağrıldı: {result}")
         try:
+            # None check first
+            if result is None:
+                print(f"[ResultMonitor] Result None, atlanıyor")
+                return True  # Bu normal bir durum, hata değil
+            
             # Result format validation
+            if not isinstance(result, dict):
+                print(f"[ResultMonitor] Result dict değil: {type(result)}")
+                return False
+                
             required_fields = ['execution_id', 'node_id', 'status']
             for field in required_fields:
                 if field not in result:
@@ -133,11 +146,67 @@ class ResultMonitor:
             )
             #print(f"[ResultMonitor] process_execution_result sonucu: {orchestration_result}")
             
+            # Check if workflow execution is complete and send webhook
+            if orchestration_result.success:
+                self._check_and_send_webhook(result["execution_id"])
+            
             return orchestration_result.success
             
         except Exception as e:
             #print(f"[ResultMonitor] process_result hata: {e}")
             return False
+
+    def _check_and_send_webhook(self, execution_id: str):
+        """
+        Check if workflow execution is complete and send webhook notification
+        """
+        try:
+            if not WEBHOOK_AVAILABLE:
+                return
+            
+            # Get execution status
+            execution_result = database.get_execution(self.db_path, execution_id)
+            if not execution_result.success:
+                return
+            
+            execution = execution_result.data
+            if not execution:
+                return
+            
+            # Only send webhook if execution is completed or failed
+            if execution["status"] not in ["completed", "failed"]:
+                return
+            
+            # Get workflow information
+            workflow_result = database.get_workflow(self.db_path, execution["workflow_id"])
+            if not workflow_result.success:
+                return
+            
+            workflow = workflow_result.data
+            if not workflow:
+                return
+            
+            # Get execution results for webhook payload
+            from ..database.functions.workflow_orchestration import get_execution_status_summary
+            summary_result = get_execution_status_summary(self.db_path, execution_id)
+            
+            results = {}
+            error_message = None
+            
+            if summary_result.success:
+                results = summary_result.data.get("node_results", {})
+                if execution["status"] == "failed":
+                    # Try to get error message from failed tasks
+                    failed_results = {k: v for k, v in results.items() if v.get("status") == "failed"}
+                    if failed_results:
+                        first_failed = list(failed_results.values())[0]
+                        error_message = first_failed.get("error_message", "Workflow execution failed")
+            
+            # Webhook functionality removed (API module deleted)
+            print(f"[ResultMonitor] Execution completed (webhook disabled): {execution_id}")
+            
+        except Exception as e:
+            print(f"[ResultMonitor] Webhook error for execution {execution_id}: {e}")
 
     def process_results(self, results):
         """

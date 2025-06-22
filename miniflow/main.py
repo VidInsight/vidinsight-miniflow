@@ -78,7 +78,8 @@ class MiniflowApp:
             return
         
         try:
-            self.scheduler_instance = scheduler.create_scheduler(self.db_path)
+            # Batch processing ile scheduler oluştur (batch_size=25)
+            self.scheduler_instance = scheduler.create_scheduler(self.db_path, batch_size=25)
             self.running = True
             
             if background:
@@ -340,6 +341,7 @@ def main():
   python -m miniflow trigger 1                # Workflow tetikle
   python -m miniflow status                   # Durum göster
   python -m miniflow interactive              # İnteraktif mod
+
         """
     )
     
@@ -352,6 +354,8 @@ def main():
     
     parser.add_argument('--background', action='store_true',
                        help='Scheduler\'ı background\'da çalıştır')
+    
+
     
     args = parser.parse_args()
     
@@ -392,6 +396,8 @@ def main():
         elif args.command == 'interactive':
             app.start_scheduler(background=True)
             app.interactive_mode()
+        
+
     
     except Exception as e:
         print(f"❌ Uygulama hatası: {e}")

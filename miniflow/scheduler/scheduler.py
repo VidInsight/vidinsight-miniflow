@@ -12,19 +12,20 @@ class WorkflowScheduler:
     Amaç: QueueMonitor ve ResultMonitor'u koordine eder ve yönetir
     """
     
-    def __init__(self, db_path, queue_polling_interval=5, result_polling_interval=5):
+    def __init__(self, db_path, queue_polling_interval=5, result_polling_interval=5, batch_size=20):
         """
-        Amaç: Scheduler'ı başlatır
+        Amaç: Scheduler'ı başlatır (Batch processing destekli)
         Döner: Yok (constructor)
         """
         self.db_path = db_path
         self.queue_polling_interval = queue_polling_interval
         self.result_polling_interval = result_polling_interval
+        self.batch_size = batch_size
 
         self.manager = Manager()
 
-        # Monitor nesneleri
-        self.queue_monitor = QueueMonitor(db_path, queue_polling_interval, self.manager)
+        # Monitor nesneleri (batch_size parametresi ile)
+        self.queue_monitor = QueueMonitor(db_path, queue_polling_interval, self.manager, batch_size)
         self.result_monitor = ResultMonitor(db_path, result_polling_interval, self.manager)
         
         # Scheduler durumu
@@ -296,12 +297,12 @@ class WorkflowScheduler:
         return stats
 
 
-def create_scheduler(db_path, queue_interval=5, result_interval=5):
+def create_scheduler(db_path, queue_interval=5, result_interval=5, batch_size=20):
     """
-    Amaç: Factory function - Scheduler oluşturur
+    Amaç: Factory function - Scheduler oluşturur (Batch processing destekli)
     Döner: WorkflowScheduler instance'ı
     """
-    return WorkflowScheduler(db_path, queue_interval, result_interval)
+    return WorkflowScheduler(db_path, queue_interval, result_interval, batch_size)
 
 
 def main():

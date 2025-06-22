@@ -71,7 +71,11 @@ from .functions.execution_queue_table import (
     find_in_queue,
     reorder_execution_queue,
     decrease_dependency_count,
-    update_task_status
+    update_task_status,
+    # Batch processing functions
+    batch_mark_tasks_as_running,
+    batch_delete_tasks,
+    batch_create_tasks
 )
 
 from .functions.execution_results_table import (
@@ -147,6 +151,8 @@ __all__ = [
     'list_execution_tasks', 'delete_execution_tasks', 'find_in_queue',
     'reorder_execution_queue', 'decrease_dependency_count',
     'update_task_status',
+    # Batch processing functions
+    'batch_mark_tasks_as_running', 'batch_delete_tasks', 'batch_create_tasks',
     
     # Results functions
     'create_record', 'find_record', 'delete_record', 'list_execution_records',

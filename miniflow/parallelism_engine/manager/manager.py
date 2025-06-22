@@ -29,6 +29,28 @@ class Manager:
             self.start()
         return self.input_queue.put(item)
 
+    def put_items_bulk(self, items: list):
+        """
+        Amaç: Birden fazla item'ı bulk olarak ekler (batch processing için)
+        Döner: Başarı durumu (True/False)
+        """
+        if not self.started:
+            self.start()
+        
+        if not items:
+            return True
+            
+        success_count = 0
+        total_items = len(items)
+        
+        # Tüm item'ları ekle
+        for item in items:
+            if self.input_queue.put(item):
+                success_count += 1
+        
+        # Tüm item'lar başarılı ise True döner
+        return success_count == total_items
+
     def shutdown(self):
         """Graceful shutdown"""
         if self.watcher and self.started:
