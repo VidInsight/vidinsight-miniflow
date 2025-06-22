@@ -2,20 +2,21 @@ import re
 import json
 from ..database.core import fetch_one, Result
 from ..database.schema import ALL_TABLES
+from ..utils.logger import logger
 
 def extract_dynamic_values(params):
     pattern = r"\{\{(.*?)\}\}"
     extracted = {}
 
-    print(f"[DEBUG] Extracting dynamic values from params: {params}")
+    logger.debug(f"Extracting dynamic values from params: {params}")
     for key, value in params.items():
         if isinstance(value, str):
             match = re.search(pattern, value)
             if match:
                 extracted[key] = match.group(1).strip()
-                print(f"[DEBUG] Found dynamic value: {key} -> {extracted[key]}")
+                logger.debug(f"Found dynamic value: {key} -> {extracted[key]}")
 
-    print(f"[DEBUG] Extracted dynamic values: {extracted}")
+    logger.debug(f"Extracted dynamic values: {extracted}")
     return extracted
 
 def split_variable_path(path: str):
