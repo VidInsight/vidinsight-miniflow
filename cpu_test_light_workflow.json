@@ -9,7 +9,7 @@
       "script": "cpu_prime_calculator.py",
       "parameters": {
         "description": "Calculate prime numbers up to 1000",
-        "max_number": 100,
+        "max_number": 1000,
         "task_duration": 1
       }
     },
@@ -19,8 +19,8 @@
       "script": "cpu_matrix_multiply.py",
       "parameters": {
         "description": "Light matrix multiplication",
-        "matrix_size": 20,
-        "iterations": 1,
+        "matrix_size": 50,
+        "iterations": 2,
         "prime_count": "{{cpu_task_1.prime_count}}"
       }
     },
@@ -32,7 +32,7 @@
         "description": "Calculate small Fibonacci numbers",
         "fibonacci_n": 20,
         "matrix_result": "{{cpu_task_2.determinant}}",
-        "iterations": 1
+        "iterations": 2
       }
     },
     {
@@ -41,7 +41,7 @@
       "script": "cpu_hash_compute.py",
       "parameters": {
         "description": "Light hash computations",
-        "hash_rounds": 1000,
+        "hash_rounds": 10000,
         "fibonacci_result": "{{cpu_task_3.fibonacci_result}}"
       }
     },
