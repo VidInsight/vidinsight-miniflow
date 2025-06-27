@@ -87,7 +87,8 @@ class WorkflowScheduler:
             
             # Scheduler durumunu güncelle
             self.running = True
-            
+
+            self.manager.start()
             # Health monitoring başlat
             self.start_health_monitoring()
             
