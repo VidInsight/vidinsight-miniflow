@@ -1,6 +1,0 @@
-{"pid": 49819, "start_time": 1750630098.075438, "start_datetime": "2025-06-23T01:08:18.075441", "type": "process_info"}
-{"timestamp": 1750630098.0921118, "datetime": "2025-06-23T01:08:18.092112", "component": "queue", "metric_type": "status", "value": "initialized", "process_id": 49819, "type": "metric", "details": {"maxsize": 1000, "created_at": 1750630098.092107}}
-{"timestamp": 1750630098.092335, "datetime": "2025-06-23T01:08:18.092335", "component": "queue", "metric_type": "status", "value": "initialized", "process_id": 49819, "type": "metric", "details": {"maxsize": 1000, "created_at": 1750630098.092334}}
-{"timestamp": 1750630098.092455, "datetime": "2025-06-23T01:08:18.092455", "component": "scheduler", "metric_type": "status", "value": "initialized", "process_id": 49819, "type": "metric", "details": {"parallel_mode": true, "batch_size": 25, "worker_threads": 4}}
-{"timestamp": 1750630098.093329, "datetime": "2025-06-23T01:08:18.093329", "component": "scheduler", "metric_type": "status", "value": "running", "process_id": 49819, "type": "metric", "details": {"mode": "parallel", "start_time": 1750630098.092455}}
-{"timestamp": 1750630133.949206, "datetime": "2025-06-23T01:08:53.949206", "component": "scheduler", "metric_type": "status", "value": "stopped", "process_id": 49819, "type": "metric", "details": {"uptime_seconds": 35.85674810409546}}
