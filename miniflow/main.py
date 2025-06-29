@@ -1,27 +1,9 @@
 #!/usr/bin/env python3
-"""
-Miniflow Main Application
-
-Bu ana uygulama dosyası workflow_manager ve scheduler'ı birleştirir:
-- Workflow yükleme ve tetikleme komutları
-- Scheduler'ın background'da çalışması
-- Unified command-line interface
-- System durumu izleme
-
-Kullanım:
-    python -m miniflow --help
-    python -m miniflow start                    # Scheduler'ı başlat
-    python -m miniflow load workflow.json       # Workflow yükle
-    python -m miniflow trigger workflow_id      # Workflow tetikle
-    python -m miniflow status                   # System durumunu göster
-    python -m miniflow interactive              # Interaktif mod
-"""
 
 import argparse
 import sys
 import threading
 import time
-import json
 import signal
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -29,8 +11,9 @@ from typing import Optional, Dict, Any
 # Miniflow components
 from . import workflow_manager
 from . import scheduler
-from .database import init_database, list_workflows, get_workflow
-from .database.functions.workflow_orchestration import get_execution_status_summary
+# NEW: Database Manager Integration (will be lazy loaded)
+# Legacy support
+from .database import init_database, list_workflows
 
 
 class MiniflowApp:
@@ -45,20 +28,24 @@ class MiniflowApp:
         self.scheduler_thread: Optional[threading.Thread] = None
         self.running = False
         self.db_path = "miniflow.db"
-        self.setup_signal_handlers()
         
-        # Database'i başlat
+        # Signal handler'ları ayarla (Ctrl+C için)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        
+        # Database initialization - Legacy for now (Database Manager disabled due to circular imports)
         try:
             init_database(self.db_path)
             print(f"✅ Database başarıyla başlatıldı: {self.db_path}")
+            
+            # Database Manager placeholder (will be enabled later)
+            self.db_manager = None
+            self.workflow_service = None
+            self.orchestration_service = None
+            
         except Exception as e:
             print(f"❌ Database başlatma hatası: {e}")
             sys.exit(1)
-    
-    def setup_signal_handlers(self):
-        """Signal handler'ları ayarla (Ctrl+C için)"""
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
     
     def _signal_handler(self, signum, frame):
         """Signal handler - temiz çıkış"""
@@ -230,6 +217,32 @@ class MiniflowApp:
         print("\n📊 Miniflow System Durumu")
         print("=" * 50)
         
+        # Database Manager durumu
+        try:
+            if hasattr(self, 'db_manager') and self.db_manager:
+                health_status = "✅ Sağlıklı" if self.db_manager.is_healthy() else "❌ Sorunlu"
+                print(f"💾 Database Manager: {health_status}")
+                
+                # Workflow istatistikleri - Database Manager ile
+                try:
+                    workflows = self.workflow_service.workflow_repo.get_all()
+                    active_workflows = self.workflow_service.workflow_repo.get_active_workflows()
+                    print(f"📋 Toplam Workflow: {len(workflows)}")
+                    print(f"🟢 Aktif Workflow: {len(active_workflows)}")
+                    
+                    if workflows:
+                        print("\n📝 Workflows (Database Manager):")
+                        for wf in workflows[:5]:  # İlk 5'ini göster
+                            print(f"   • {wf.id}: {wf.name} ({wf.status})")
+                        if len(workflows) > 5:
+                            print(f"   ... ve {len(workflows) - 5} tane daha")
+                except Exception as e:
+                    print(f"⚠️ Workflow bilgileri alınamadı: {e}")
+            else:
+                print("⚠️ Database Manager: Başlatılmamış")
+        except Exception as e:
+            print(f"❌ Database Manager kontrolü başarısız: {e}")
+        
         # Scheduler durumu - hem local hem de system-wide kontrol
         scheduler_active = False
         
@@ -251,9 +264,11 @@ class MiniflowApp:
             print("🚀 Scheduler: Aktif")
             if self.scheduler_instance:
                 try:
-                    status = self.scheduler_instance.get_status()
-                    queue_status = "✅" if status.get('queue_monitor_running') else "❌"
-                    result_status = "✅" if status.get('result_monitor_running') else "❌"
+                    # Basit durum kontrolü - monitor'ları ayrı ayrı kontrol et
+                    queue_running = self.scheduler_instance.queue_monitor.is_running()
+                    result_running = self.scheduler_instance.result_monitor.is_running()
+                    queue_status = "✅" if queue_running else "❌"
+                    result_status = "✅" if result_running else "❌"
                     print(f"   Queue Monitor: {queue_status}")
                     print(f"   Result Monitor: {result_status}")
                 except:
@@ -261,24 +276,25 @@ class MiniflowApp:
         else:
             print("🛑 Scheduler: Pasif")
         
-        # Workflow'lar
-        try:
-            workflows_result = list_workflows(self.db_path)
-            if workflows_result.success:
-                workflows = workflows_result.data
-                print(f"📋 Toplam Workflow: {len(workflows)}")
-                
-                if workflows:
-                    print("\n📝 Workflows:")
-                    for wf in workflows[:5]:  # İlk 5'ini göster
-                        print(f"   • {wf['id']}: {wf['name']}")
-                    if len(workflows) > 5:
-                        print(f"   ... ve {len(workflows) - 5} tane daha")
-            else:
-                print(f"❌ Workflow bilgileri alınamadı: {workflows_result.error}")
-        
-        except Exception as e:
-            print(f"❌ Workflow bilgileri alınamadı: {e}")
+        # Legacy workflow kontrolü (fallback)
+        if not hasattr(self, 'db_manager') or not self.db_manager:
+            try:
+                workflows_result = list_workflows(self.db_path)
+                if workflows_result.success:
+                    workflows = workflows_result.data
+                    print(f"📋 Toplam Workflow (Legacy): {len(workflows)}")
+                    
+                    if workflows:
+                        print("\n📝 Workflows (Legacy):")
+                        for wf in workflows[:5]:  # İlk 5'ini göster
+                            print(f"   • {wf['id']}: {wf['name']}")
+                        if len(workflows) > 5:
+                            print(f"   ... ve {len(workflows) - 5} tane daha")
+                else:
+                    print(f"❌ Workflow bilgileri alınamadı: {workflows_result.error}")
+            
+            except Exception as e:
+                print(f"❌ Workflow bilgileri alınamadı: {e}")
         
         print()
     
