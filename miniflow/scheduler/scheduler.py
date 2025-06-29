@@ -1,6 +1,8 @@
 import time
 import threading
 
+# NEW: Database Manager Integration (temporarily disabled)
+# Legacy support  
 from .. import database
 from .input_monitor import MiniflowInputMonitor
 from .output_monitor import MiniflowOutputMonitor
@@ -21,6 +23,9 @@ class WorkflowScheduler:
         self.queue_polling_interval = queue_polling_interval
         self.result_polling_interval = result_polling_interval
         self.batch_size = batch_size
+
+        # NEW: Database Manager Integration (temporarily disabled)
+        self.db_manager = None
 
         self.manager = Manager()
 
@@ -63,9 +68,10 @@ class WorkflowScheduler:
         if self.running:
             return False
         
-        # Database bağlantı kontrolü
+        # Database bağlantı kontrolü - Legacy only for now
         connection_result = database.check_database_connection(self.db_path)
         if not connection_result.success:
+            print("❌ Scheduler: Database bağlantı hatası")
             return False
         
         try:
