@@ -2,10 +2,8 @@ import time
 import threading
 
 from .. import database
-from .queue_monitoring import QueueMonitor
-from .parallel_queue_monitoring import ParallelQueueMonitor
-from .result_monitoring import ResultMonitor
-from .parallel_result_monitoring import ParallelResultMonitor
+from .input_monitor import MiniflowInputMonitor
+from .output_monitor import MiniflowOutputMonitor
 from ..parallelism_engine import Manager
 
 
@@ -14,7 +12,7 @@ class WorkflowScheduler:
     Amaç: QueueMonitor ve ResultMonitor'u koordine eder ve yönetir
     """
     
-    def __init__(self, db_path, queue_polling_interval=5, result_polling_interval=5, batch_size=20, use_parallel_monitor=True):
+    def __init__(self, db_path, queue_polling_interval=5, result_polling_interval=5, batch_size=20):
         """
         Amaç: Scheduler'ı başlatır (Parallel processing destekli)
         Döner: Yok (constructor)
@@ -23,32 +21,30 @@ class WorkflowScheduler:
         self.queue_polling_interval = queue_polling_interval
         self.result_polling_interval = result_polling_interval
         self.batch_size = batch_size
-        self.use_parallel_monitor = use_parallel_monitor
 
         self.manager = Manager()
 
-        # Choose between parallel or legacy monitor
-        if use_parallel_monitor:
-            # Use parallel queue monitor for better performance
-            self.queue_monitor = ParallelQueueMonitor(
-                db_path, 
-                queue_polling_interval, 
-                self.manager, 
-                batch_size, 
-                worker_threads=4
-            )
-            # Use parallel result monitor for better performance
-            self.result_monitor = ParallelResultMonitor(
-                db_path, 
-                result_polling_interval, 
-                self.manager, 
-                batch_size=25, 
-                worker_threads=4
-            )
-        else:
-            # Use legacy monitors for compatibility
-            self.queue_monitor = QueueMonitor(db_path, queue_polling_interval, self.manager, batch_size)
-            self.result_monitor = ResultMonitor(db_path, result_polling_interval, self.manager)
+        # ------------------------------------------------------------
+        # Input Monitor'u başlatır
+        # ------------------------------------------------------------
+        self.queue_monitor = MiniflowInputMonitor(
+            db_path=db_path, 
+            polling_interval=queue_polling_interval, 
+            manager=self.manager, 
+            batch_size=batch_size, 
+            worker_threads=4
+        )
+
+        # ------------------------------------------------------------
+        # Output Monitor'u başlatır
+        # ------------------------------------------------------------
+        self.result_monitor = MiniflowOutputMonitor(
+            db_path=db_path, 
+            polling_interval=result_polling_interval, 
+            manager=self.manager, 
+            batch_size=25, 
+            worker_threads=4
+        )
         
         # Scheduler durumu
         self.running = False
@@ -74,21 +70,25 @@ class WorkflowScheduler:
             return False
         
         try:
+            # CRITICAL FIX: Start manager FIRST before monitors
+            self.manager.start()
+            
             # Sequential startup - Queue monitor önce başlar
             queue_started = self.queue_monitor.start()
             if not queue_started:
+                self.manager.shutdown()  # Clean shutdown
                 return False
             
             # Result monitor sonra başlar
             result_started = self.result_monitor.start()
             if not result_started:
                 self.queue_monitor.stop()  # Rollback
+                self.manager.shutdown()    # Clean shutdown
                 return False
             
             # Scheduler durumunu güncelle
             self.running = True
-
-            self.manager.start()
+            
             # Health monitoring başlat
             self.start_health_monitoring()
             
@@ -320,7 +320,7 @@ class WorkflowScheduler:
         return stats
 
 
-def create_scheduler(db_path, queue_interval=0.1, result_interval=0.5, batch_size=50, use_parallel_monitor=True):
+def create_scheduler(db_path, queue_interval=0.1, result_interval=0.5, batch_size=50):
     """
     Amaç: Factory function - Scheduler oluşturur (Parallel processing optimized)
     Döner: WorkflowScheduler instance'ı
@@ -329,9 +329,9 @@ def create_scheduler(db_path, queue_interval=0.1, result_interval=0.5, batch_siz
     - queue_interval: 5s -> 0.1s (50x faster polling)
     - result_interval: 5s -> 0.5s (10x faster result processing)
     - batch_size: 20 -> 50 (2.5x larger batches)
-    - use_parallel_monitor: True (4 worker threads for true parallelism)
+    - Parallel processing enabled with worker threads
     """
-    return WorkflowScheduler(db_path, queue_interval, result_interval, batch_size, use_parallel_monitor)
+    return WorkflowScheduler(db_path, queue_interval, result_interval, batch_size)
 
 
 def main():
@@ -375,3 +375,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+        # TODO: Manager kontrolü eklenecek
