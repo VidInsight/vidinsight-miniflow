@@ -2,7 +2,6 @@ import re
 import json
 from ..database.core import fetch_one, fetch_all, Result
 from ..database.schema import ALL_TABLES
-from ..utils.logger import logger
 
 def extract_dynamic_values(params):
     pattern = r"\{\{(.*?)\}\}"
