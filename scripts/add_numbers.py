@@ -4,14 +4,18 @@ class AddNumbers:
     def __init__(self):
         self.name = "Add Numbers Calculator"
     
-    def run(self):
+    def run(self, params=None):
         """
         İki sayıyı toplar ve JSON formatında sonuç döner
         """
         try:
-            # Test için sabit değerler (gerçek uygulamada parametrelerden gelecek)
-            a = 10
-            b = 20
+            # Parametreleri al, yoksa varsayılan değerler kullan
+            if params and isinstance(params, dict):
+                a = params.get('a', 10)
+                b = params.get('b', 20)
+            else:
+                a = 10
+                b = 20
             
             result = a + b
             

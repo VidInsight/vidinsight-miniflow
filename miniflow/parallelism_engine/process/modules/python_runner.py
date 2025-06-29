@@ -31,10 +31,7 @@ def python_runner(item: json, output_queue: Queue):
         if isinstance(context, str):
             context = json.loads(context)
 
-        print(f"[PythonRunner] Context: {context}")
-        for key, value in context.items():
-            print(f"[PythonRunner] {key}: {value}")
-            print(f"[PythonRunner] {type(key)}: {type(value)}")
+
 
         result = run_module.run(context)
 
@@ -43,22 +40,22 @@ def python_runner(item: json, output_queue: Queue):
         item["status"] = "success"
 
     except FileNotFoundError:
-        item["error_message"] = {"error": "Script file not found"}
+        item["error_message"] = "Script file not found"
         item["status"] = "failed"
     except ImportError as e:
-        item["error_message"] = {"error": f"Import error: {str(e)}"}
+        item["error_message"] = f"Import error: {str(e)}"
         item["status"] = "failed"
     except AttributeError as e:
-        item["error_message"] = {"error": f"Attribute error: {str(e)}"}
+        item["error_message"] = f"Attribute error: {str(e)}"
         item["status"] = "failed"
     except ValueError as e:
-        item["error_message"] = {"error": f"Value error: {str(e)}"}
+        item["error_message"] = f"Value error: {str(e)}"
         item["status"] = "failed"
     except (json.JSONDecodeError, TypeError) as e:
-        item["error_message"] = {"error": f"JSON error: {str(e)}"}
+        item["error_message"] = f"JSON error: {str(e)}"
         item["status"] = "failed"
     except Exception as e:
-        item["error_message"] = {"error": f"Unexpected error: {str(e)}"}
+        item["error_message"] = f"Unexpected error: {str(e)}"
         item["status"] = "failed"
 
     output_queue.put(item)

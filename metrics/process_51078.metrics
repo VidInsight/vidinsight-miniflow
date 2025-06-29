@@ -1,0 +1,5 @@
+{"pid": 51078, "start_time": 1750630291.6695309, "start_datetime": "2025-06-23T01:11:31.669532", "type": "process_info"}
+{"timestamp": 1750630291.8176901, "datetime": "2025-06-23T01:11:31.817690", "component": "queue", "metric_type": "status", "value": "initialized", "process_id": 51078, "type": "metric", "details": {"maxsize": 1000, "created_at": 1750630291.817688}}
+{"timestamp": 1750630291.8178492, "datetime": "2025-06-23T01:11:31.817849", "component": "queue", "metric_type": "status", "value": "initialized", "process_id": 51078, "type": "metric", "details": {"maxsize": 1000, "created_at": 1750630291.817848}}
+{"timestamp": 1750630291.818186, "datetime": "2025-06-23T01:11:31.818186", "component": "scheduler", "metric_type": "status", "value": "initialized", "process_id": 51078, "type": "metric", "details": {"parallel_mode": true, "batch_size": 25, "worker_threads": 4}}
+{"timestamp": 1750630291.819503, "datetime": "2025-06-23T01:11:31.819503", "component": "scheduler", "metric_type": "status", "value": "running", "process_id": 51078, "type": "metric", "details": {"mode": "parallel", "start_time": 1750630291.8181849}}

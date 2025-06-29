@@ -2,64 +2,57 @@ from functools import wraps
 from .config import DatabaseConfig
 from .exceptions import Result
 from .schema import *
+from .connection_pool import get_connection_pool, initialize_connection_pool
 
-# İşlem fonksiyonları
+# Performance optimized database functions using connection pool
 def execute_sql_query(db_path, query, params=None):
     try:
-        config = DatabaseConfig(db_path)
-        conn = config.get_connection()
-        with conn as db_conn:
-            cursor = db_conn.cursor()
+        pool = get_connection_pool(db_path)
+        with pool.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute(query, params or ())
             affected_rows = cursor.rowcount
-            db_conn.commit()
-
+            # Connection pool handles transaction management
             return Result.success(data={"affected_rows": affected_rows})
     except Exception as e:
         return Result.error(error=str(e), metadata={"query": query, "params": params})
     
 def fetch_one(db_path, query, params=None):
     try:
-        config = DatabaseConfig(db_path)
-        conn = config.get_connection()
-        with conn as db_conn:
-            cursor = db_conn.cursor()
+        pool = get_connection_pool(db_path)
+        with pool.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute(query, params or ())
             row = cursor.fetchone()
-
             result = dict(row) if row else None
-
             return Result.success(data=result)
     except Exception as e:
         return Result.error(error=str(e), metadata={"query": query, "params": params})
             
 def fetch_all(db_path, query, params=None):
     try:
-        config = DatabaseConfig(db_path)
-        conn = config.get_connection()
-        with conn as db_conn:
-            cursor = db_conn.cursor()
+        pool = get_connection_pool(db_path)
+        with pool.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute(query, params or ())
             rows = cursor.fetchall()
-
             result = [dict(row) for row in rows]
-
             return Result.success(data=result)
     except Exception as e:
         return Result.error(error=str(e), metadata={"query": query, "params": params})
     
 def check_database_connection(db_path):
     try:
-        config = DatabaseConfig(db_path)
-        conn = config.get_connection()
-        with conn as db_conn:
-            cursor = db_conn.cursor()
+        pool = get_connection_pool(db_path)
+        with pool.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("SELECT 1")
             result = cursor.fetchone()
             return Result.success(data={
                 "connection_status": bool(result), 
                 "db_path": db_path,
-                "test_result": result[0] if result else None})
+                "test_result": result[0] if result else None,
+                "pool_stats": pool.get_stats()})
     except Exception as e:
         return Result.error(error=str(e), metadata={"db_path": db_path})
 
@@ -74,7 +67,7 @@ def handle_db_errors(operation_name: str):
         return wrapper
     return decorator 
 
-# Veritabanı fonksiyonları
+# Veritabanı fonksiyonları
 def create_all_tables(db_path):
     try:
         created_tables = []
@@ -195,6 +188,9 @@ def get_all_table_info(db_path):
     
 def init_database(db_path):
     try: 
+        # Initialize connection pool first for better performance
+        initialize_connection_pool(db_path, max_connections=10)
+        
         # Adım 1: Tabloları oluştur
         table_result = create_all_tables(db_path)
         if not table_result.success:
@@ -205,7 +201,7 @@ def init_database(db_path):
         if not index_result.success:
             return index_result
         
-        # Adım 3: Çıktıyı oluştur
+        # Adım 3: Çıktıyı oluştur
         return Result.success({
             "tables_created": len(ALL_TABLES),
             "indexes_created": len(INDEXES),
@@ -214,3 +210,11 @@ def init_database(db_path):
         
     except Exception as e:
         return Result.error(f"Failed to initialize database: {str(e)}")
+
+def execute_bulk_operations(db_path, operations):
+    """Execute multiple operations in a single transaction for better performance"""
+    try:
+        pool = get_connection_pool(db_path)
+        return pool.execute_bulk_transaction(operations)
+    except Exception as e:
+        return Result.error(error=str(e), metadata={"operations_count": len(operations)})

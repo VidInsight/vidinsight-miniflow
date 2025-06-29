@@ -278,3 +278,125 @@ def update_task_status(db_path, task_id, new_status):
         "new_status": new_status,
         "affected_rows": result.data.get("affected_rows", 0)
     })
+
+
+# Batch Processing Fonksiyonları (Performans Optimizasyonu)
+@handle_db_errors("batch mark tasks as running")
+def batch_mark_tasks_as_running(db_path, task_ids):
+    """
+    Amaç: Birden fazla task'ı aynı anda 'running' durumuna getirir (batch processing)
+    Döner: Başarılı ise güncellenen task sayısı içeren Result objesi, hata durumunda hata mesajı
+    """
+    if not task_ids:
+        return Result.success({"updated_count": 0, "task_ids": []})
+    
+    # Parametrized query için placeholder'lar oluştur
+    placeholders = ','.join(['?' for _ in task_ids])
+    
+    query = f"""
+    UPDATE execution_queue 
+    SET status = 'running' 
+    WHERE id IN ({placeholders}) AND status = 'ready'
+    """
+    
+    # 'running' parametresini task_ids'nin başına ekle
+    params = ['running'] + list(task_ids)
+    # Düzeltme: parametreler zaten query'de doğru
+    params = list(task_ids)
+    
+    result = execute_sql_query(db_path=db_path, query=query, params=params)
+    
+    if not result.success:
+        return Result.error(f"Failed to batch mark tasks as running: {result.error}")
+    
+    updated_count = result.data.get("affected_rows", 0)
+    
+    return Result.success({
+        "updated_count": updated_count,
+        "task_ids": task_ids[:updated_count],  # Sadece başarılı olanlar
+        "batch_size": len(task_ids)
+    })
+
+
+@handle_db_errors("batch delete tasks")  
+def batch_delete_tasks(db_path, task_ids):
+    """
+    Amaç: Birden fazla task'ı aynı anda siler (batch processing)
+    Döner: Başarılı ise silinen task sayısı içeren Result objesi, hata durumunda hata mesajı
+    """
+    if not task_ids:
+        return Result.success({"deleted_count": 0, "task_ids": []})
+    
+    # Parametrized query için placeholder'lar oluştur
+    placeholders = ','.join(['?' for _ in task_ids])
+    
+    query = f"DELETE FROM execution_queue WHERE id IN ({placeholders})"
+    
+    result = execute_sql_query(db_path=db_path, query=query, params=list(task_ids))
+    
+    if not result.success:
+        return Result.error(f"Failed to batch delete tasks: {result.error}")
+    
+    deleted_count = result.data.get("affected_rows", 0)
+    
+    return Result.success({
+        "deleted_count": deleted_count,
+        "task_ids": task_ids[:deleted_count],
+        "batch_size": len(task_ids)
+    })
+
+
+@handle_db_errors("batch create tasks")
+def batch_create_tasks(db_path, execution_id, node_data_list):
+    """
+    Amaç: Birden fazla task'ı aynı anda oluşturur (batch processing)
+    Args:
+        node_data_list: List of dicts with keys: node_id, dependency_count, priority
+    Döner: Başarılı ise oluşturulan task'ların ID'leri içeren Result objesi
+    """
+    if not node_data_list:
+        return Result.success({"created_tasks": [], "created_count": 0})
+    
+    # Bulk insert için değerleri hazırla
+    task_data = []
+    task_ids = []
+    
+    for node_data in node_data_list:
+        task_id = generate_uuid()
+        task_ids.append(task_id)
+        
+        dependency_count = node_data.get('dependency_count', 0)
+        priority = node_data.get('priority', 0)
+        initial_status = 'ready' if dependency_count == 0 else 'pending'
+        
+        task_data.append((
+            task_id,
+            execution_id, 
+            node_data['node_id'],
+            initial_status,
+            priority,
+            dependency_count
+        ))
+    
+    # Bulk insert query
+    query = """
+    INSERT INTO execution_queue 
+    (id, execution_id, node_id, status, priority, dependency_count)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """
+    
+    # Multiple insert işlemi
+    success_count = 0
+    created_ids = []
+    
+    for task_tuple in task_data:
+        result = execute_sql_query(db_path=db_path, query=query, params=task_tuple)
+        if result.success:
+            success_count += 1
+            created_ids.append(task_tuple[0])  # task_id
+    
+    return Result.success({
+        "created_count": success_count,
+        "created_tasks": created_ids,
+        "total_requested": len(node_data_list)
+    })

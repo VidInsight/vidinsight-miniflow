@@ -72,13 +72,17 @@ class MiniflowApp:
         
         Args:
             background: True ise background thread'de çalışır
+            
+        Returns:
+            bool: Başarı durumu
         """
         if self.scheduler_instance is not None:
             print("⚠️ Scheduler zaten çalışıyor")
-            return
+            return True
         
         try:
-            self.scheduler_instance = scheduler.create_scheduler(self.db_path)
+            # Batch processing ile scheduler oluştur (batch_size=25)
+            self.scheduler_instance = scheduler.create_scheduler(self.db_path, batch_size=25)
             self.running = True
             
             if background:
@@ -88,13 +92,19 @@ class MiniflowApp:
                 )
                 self.scheduler_thread.start()
                 print("🚀 Scheduler background'da başlatıldı")
+                
+                # Background mode'da kısa bir süre bekleyip kontrolü et
+                time.sleep(2)
+                return self.running and self.scheduler_instance is not None
             else:
                 print("🚀 Scheduler başlatılıyor...")
                 self._run_scheduler_loop()
+                return True
                 
         except Exception as e:
             print(f"❌ Scheduler başlatma hatası: {e}")
-            raise
+            self.running = False
+            return False
     
     def _run_scheduler_loop(self):
         """Scheduler ana döngüsü"""
@@ -220,15 +230,34 @@ class MiniflowApp:
         print("\n📊 Miniflow System Durumu")
         print("=" * 50)
         
-        # Scheduler durumu - gerçek durumu kontrol et
+        # Scheduler durumu - hem local hem de system-wide kontrol
+        scheduler_active = False
+        
+        # Local instance kontrolü
         if self.scheduler_instance and self.running and self.scheduler_instance.is_running():
+            scheduler_active = True
+        
+        # System-wide process kontrolü (alternatif kontrol)
+        import subprocess
+        try:
+            result = subprocess.run(['pgrep', '-f', 'miniflow.*start'], 
+                                 capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                scheduler_active = True
+        except:
+            pass
+        
+        if scheduler_active:
             print("🚀 Scheduler: Aktif")
-            # Detaylı scheduler durumu
-            status = self.scheduler_instance.get_status()
-            queue_status = "✅" if status.get('queue_monitor_running') else "❌"
-            result_status = "✅" if status.get('result_monitor_running') else "❌"
-            print(f"   Queue Monitor: {queue_status}")
-            print(f"   Result Monitor: {result_status}")
+            if self.scheduler_instance:
+                try:
+                    status = self.scheduler_instance.get_status()
+                    queue_status = "✅" if status.get('queue_monitor_running') else "❌"
+                    result_status = "✅" if status.get('result_monitor_running') else "❌"
+                    print(f"   Queue Monitor: {queue_status}")
+                    print(f"   Result Monitor: {result_status}")
+                except:
+                    print("   (Durum bilgisi alınamadı)")
         else:
             print("🛑 Scheduler: Pasif")
         
@@ -340,6 +369,7 @@ def main():
   python -m miniflow trigger 1                # Workflow tetikle
   python -m miniflow status                   # Durum göster
   python -m miniflow interactive              # İnteraktif mod
+
         """
     )
     
@@ -352,6 +382,8 @@ def main():
     
     parser.add_argument('--background', action='store_true',
                        help='Scheduler\'ı background\'da çalıştır')
+    
+
     
     args = parser.parse_args()
     
@@ -392,6 +424,8 @@ def main():
         elif args.command == 'interactive':
             app.start_scheduler(background=True)
             app.interactive_mode()
+        
+
     
     except Exception as e:
         print(f"❌ Uygulama hatası: {e}")
