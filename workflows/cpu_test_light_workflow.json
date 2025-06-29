@@ -1,0 +1,84 @@
+{
+  "name": "CPU Light Test Workflow",
+  "description": "Light computation tasks for quick testing",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "name": "cpu_task_1",
+      "type": "task",
+      "script": "cpu_prime_calculator.py",
+      "parameters": {
+        "description": "Calculate prime numbers up to 1000",
+        "max_number": 1000,
+        "task_duration": 1
+      }
+    },
+    {
+      "name": "cpu_task_2",
+      "type": "task",
+      "script": "cpu_matrix_multiply.py",
+      "parameters": {
+        "description": "Light matrix multiplication",
+        "matrix_size": 50,
+        "iterations": 2,
+        "prime_count": "{{cpu_task_1.prime_count}}"
+      }
+    },
+    {
+      "name": "cpu_task_3",
+      "type": "task",
+      "script": "cpu_fibonacci.py",
+      "parameters": {
+        "description": "Calculate small Fibonacci numbers",
+        "fibonacci_n": 20,
+        "matrix_result": "{{cpu_task_2.determinant}}",
+        "iterations": 2
+      }
+    },
+    {
+      "name": "cpu_task_4",
+      "type": "task",
+      "script": "cpu_hash_compute.py",
+      "parameters": {
+        "description": "Light hash computations",
+        "hash_rounds": 10000,
+        "fibonacci_result": "{{cpu_task_3.fibonacci_result}}"
+      }
+    },
+    {
+      "name": "cpu_task_5",
+      "type": "task",
+      "script": "cpu_final_aggregate.py",
+      "parameters": {
+        "description": "Aggregate all CPU light results",
+        "prime_count": "{{cpu_task_1.prime_count}}",
+        "matrix_ops": "{{cpu_task_2.total_operations}}",
+        "fibonacci_sum": "{{cpu_task_3.fibonacci_sum}}",
+        "hash_result": "{{cpu_task_4.final_hash}}"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "cpu_task_1",
+      "to": "cpu_task_2",
+      "condition_type": "success"
+    },
+    {
+      "from": "cpu_task_2",
+      "to": "cpu_task_3",
+      "condition_type": "success"
+    },
+    {
+      "from": "cpu_task_3",
+      "to": "cpu_task_4",
+      "condition_type": "success"
+    },
+    {
+      "from": "cpu_task_4",
+      "to": "cpu_task_5",
+      "condition_type": "success"
+    }
+  ],
+  "triggers": []
+} 

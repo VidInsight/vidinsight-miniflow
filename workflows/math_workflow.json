@@ -1,0 +1,44 @@
+{
+  "name": "Matematik İşlemleri Workflow",
+  "description": "Basit matematik işlemleri yapan 3 düğümlü test workflow'u",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "name": "add_step",
+      "type": "task",
+      "script": "add_numbers.py",
+      "parameters": {
+        "description": "İki sayıyı toplama işlemi"
+      }
+    },
+    {
+      "name": "multiply_step",
+      "type": "task", 
+      "script": "multiply_numbers.py",
+      "parameters": {
+        "description": "İki sayıyı çarpma işlemi"
+      }
+    },
+    {
+      "name": "average_step",
+      "type": "task",
+      "script": "calculate_average.py", 
+      "parameters": {
+        "description": "Sayıların ortalamasını hesaplama işlemi"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "add_step",
+      "to": "multiply_step",
+      "condition_type": "success"
+    },
+    {
+      "from": "multiply_step", 
+      "to": "average_step",
+      "condition_type": "success"
+    }
+  ],
+  "triggers": []
+} 

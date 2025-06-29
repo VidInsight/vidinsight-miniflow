@@ -192,3 +192,15 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+.db
+.dn-
+.db-lock
+.db-trace
+.db-trace-lock
+.db-trace-lock-journal
+.db-trace-lock-journal-lock
+.db-trace-lock-journal-lock-journal
+.db-trace-lock-journal-lock-journal-lock
+.db-SageMath
+.db.wal

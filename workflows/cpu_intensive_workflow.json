@@ -1,0 +1,84 @@
+{
+  "name": "CPU Intensive Auto Scaling Test Workflow",
+  "description": "Heavy computation tasks to test auto scaling behavior",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "name": "cpu_task_1",
+      "type": "task",
+      "script": "cpu_prime_calculator.py",
+      "parameters": {
+        "description": "Calculate prime numbers up to 100000",
+        "max_number": 100000,
+        "task_duration": 15
+      }
+    },
+    {
+      "name": "cpu_task_2",
+      "type": "task",
+      "script": "cpu_matrix_multiply.py",
+      "parameters": {
+        "description": "Heavy matrix multiplication",
+        "matrix_size": 500,
+        "iterations": 10,
+        "prime_count": "{{cpu_task_1.prime_count}}"
+      }
+    },
+    {
+      "name": "cpu_task_3",
+      "type": "task",
+      "script": "cpu_fibonacci.py",
+      "parameters": {
+        "description": "Calculate large Fibonacci numbers",
+        "fibonacci_n": 35,
+        "matrix_result": "{{cpu_task_2.determinant}}",
+        "iterations": 5
+      }
+    },
+    {
+      "name": "cpu_task_4",
+      "type": "task",
+      "script": "cpu_hash_compute.py",
+      "parameters": {
+        "description": "Intensive hash computations",
+        "hash_rounds": 1000000,
+        "fibonacci_result": "{{cpu_task_3.fibonacci_result}}"
+      }
+    },
+    {
+      "name": "cpu_task_5",
+      "type": "task",
+      "script": "cpu_final_aggregate.py",
+      "parameters": {
+        "description": "Aggregate all CPU intensive results",
+        "prime_count": "{{cpu_task_1.prime_count}}",
+        "matrix_ops": "{{cpu_task_2.total_operations}}",
+        "fibonacci_sum": "{{cpu_task_3.fibonacci_sum}}",
+        "hash_result": "{{cpu_task_4.final_hash}}"
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "cpu_task_1",
+      "to": "cpu_task_2",
+      "condition_type": "success"
+    },
+    {
+      "from": "cpu_task_2",
+      "to": "cpu_task_3",
+      "condition_type": "success"
+    },
+    {
+      "from": "cpu_task_3",
+      "to": "cpu_task_4",
+      "condition_type": "success"
+    },
+    {
+      "from": "cpu_task_4",
+      "to": "cpu_task_5",
+      "condition_type": "success"
+    }
+  ],
+  "triggers": []
+} 
