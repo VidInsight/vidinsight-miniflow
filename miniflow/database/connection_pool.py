@@ -12,7 +12,7 @@ import time
 from contextlib import contextmanager
 from typing import Optional, Dict, Any
 from .exceptions import DatabaseError, Result
-from ..utils.logger import logger
+from ..utils.logger_config import logger
 
 
 class SQLiteConnectionPool:

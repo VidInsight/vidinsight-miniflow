@@ -14,8 +14,8 @@ from . import database
 
 # Scheduler imports
 from .scheduler import (
-    QueueMonitor,
-    ResultMonitor,
+    MiniflowInputMonitor,
+    MiniflowOutputMonitor,
     WorkflowScheduler,
     create_scheduler,
     create_context_for_task,
@@ -35,8 +35,8 @@ __all__ = [
     'database',
     
     # Scheduler components
-    'QueueMonitor',
-    'ResultMonitor',
+    'MiniflowInputMonitor',
+    'MiniflowOutputMonitor',
     'WorkflowScheduler',
     'create_scheduler',
     
