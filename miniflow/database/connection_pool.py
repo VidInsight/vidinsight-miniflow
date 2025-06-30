@@ -9,10 +9,12 @@ import sqlite3
 import threading
 import queue
 import time
+import logging
 from contextlib import contextmanager
 from typing import Optional, Dict, Any
 from .exceptions import DatabaseError, Result
-from ..utils.logger_config import logger
+
+logger = logging.getLogger("miniflow.database.connection_pool")
 
 
 class SQLiteConnectionPool:

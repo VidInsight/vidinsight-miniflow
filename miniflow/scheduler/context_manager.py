@@ -1,5 +1,10 @@
 import re
 import json
+
+# Logger setup
+import logging
+logger = logging.getLogger("miniflow.scheduler.context_manager")
+
 from ..database.core import fetch_one, fetch_all, Result
 from ..database.schema import ALL_TABLES
 
@@ -33,6 +38,8 @@ def find_node_id(db_path, execution_id, node_name):
     Returns:
         str: Node ID if found, None otherwise
     """
+    logger.debug(f"Node ID aranıyor - execution_id: {execution_id}, node_name: {node_name}")
+    
     # First get workflow_id from executions table using index
     workflow_query = """
     SELECT e.workflow_id 
@@ -44,9 +51,11 @@ def find_node_id(db_path, execution_id, node_name):
                               params=(execution_id,))
     
     if not workflow_result.success or not workflow_result.data:
+        logger.warning(f"Workflow bulunamadı - execution_id: {execution_id}")
         return None
         
     workflow_id = workflow_result.data.get('workflow_id')
+    logger.debug(f"Workflow bulundu - workflow_id: {workflow_id}")
     
     # Then find node_id from nodes table using index
     node_query = """
@@ -59,9 +68,11 @@ def find_node_id(db_path, execution_id, node_name):
                           params=(workflow_id, node_name))
     
     if not node_result.success or not node_result.data:
+        logger.warning(f"Node bulunamadı - workflow_id: {workflow_id}, node_name: {node_name}")
         return None
         
     node_id = node_result.data.get('id')
+    logger.debug(f"Node bulundu - node_id: {node_id}")
     return node_id
 
 def get_result_data_for_node(db_path, execution_id, node_id):
@@ -76,6 +87,8 @@ def get_result_data_for_node(db_path, execution_id, node_id):
     Returns:
         dict: Result data if successful, empty dict otherwise
     """
+    logger.debug(f"Result data alınıyor - execution_id: {execution_id}, node_id: {node_id}")
+    
     query = """
     SELECT result_data, status, error_message
     FROM execution_results
@@ -87,6 +100,7 @@ def get_result_data_for_node(db_path, execution_id, node_id):
                       params=(execution_id, node_id))
     
     if not result.success or not result.data:
+        logger.debug(f"Result data bulunamadı - execution_id: {execution_id}, node_id: {node_id}")
         return {}
         
     data = result.data
@@ -94,15 +108,19 @@ def get_result_data_for_node(db_path, execution_id, node_id):
     # Check if the execution was successful
     if data.get('status') != 'success':
         error_msg = data.get('error_message', 'Unknown error')
+        logger.warning(f"Node execution hatası - node_id: {node_id}, error: {error_msg}")
         return {"error": error_msg}
     
     if data.get('result_data'):
         try:
             parsed_data = json.loads(data['result_data'])
+            logger.debug(f"Result data parse edildi - node_id: {node_id}")
             return parsed_data
         except json.JSONDecodeError:
+            logger.error(f"JSON parse hatası - node_id: {node_id}")
             return {"error": "Invalid JSON"}
     
+    logger.debug(f"Boş result data - node_id: {node_id}")
     return {}
 
 def create_context(params_dict, execution_id, db_path):
@@ -117,11 +135,16 @@ def create_context(params_dict, execution_id, db_path):
     Returns:
         dict: Processed context with resolved values
     """
+    logger.debug(f"Context oluşturuluyor - execution_id: {execution_id}")
+    
     # Extract dynamic values
     dynamic_values = extract_dynamic_values(params_dict)
+    logger.debug(f"Dynamic değerler çıkarıldı: {dynamic_values}")
     
     # Process each dynamic value
     for param_name, path in dynamic_values.items():
+        logger.debug(f"Dynamic değer işleniyor - param: {param_name}, path: {path}")
+        
         # Split path into node name and attribute
         node_name, attribute = split_variable_path(path)
         
@@ -139,7 +162,15 @@ def create_context(params_dict, execution_id, db_path):
                 if value is not None:
                     # Replace the placeholder with the actual value
                     params_dict[param_name] = value
+                    logger.debug(f"Dynamic değer çözümlendi - param: {param_name}, value: {value}")
+                else:
+                    logger.warning(f"Attribute bulunamadı - param: {param_name}, attribute: {attribute}")
+            else:
+                logger.warning(f"Result data alınamadı - param: {param_name}, node_id: {node_id}")
+        else:
+            logger.warning(f"Node ID bulunamadı - param: {param_name}, node_name: {node_name}")
     
+    logger.debug(f"Context oluşturuldu - execution_id: {execution_id}")
     return params_dict
 
 def create_context_for_task(params_dict, execution_id, db_path):
@@ -154,23 +185,30 @@ def create_context_for_task(params_dict, execution_id, db_path):
     Returns:
         dict: Processed context with resolved dynamic values
     """
+    logger.debug(f"Task context oluşturuluyor - execution_id: {execution_id}")
+    
     try:
         # If params_dict is already a dict, use it directly
         if isinstance(params_dict, dict):
             params = params_dict
+            logger.debug("Params zaten dict formatında")
         else:
             # Try to parse JSON string
             try:
                 params = json.loads(params_dict)
+                logger.debug("Params JSON string'den parse edildi")
             except json.JSONDecodeError:
+                logger.error("Params JSON parse edilemedi")
                 return {}
         
         # Process the context
         processed_context = create_context(params, execution_id, db_path)
         
+        logger.debug(f"Task context başarıyla oluşturuldu - execution_id: {execution_id}")
         return processed_context
         
-    except Exception:
+    except Exception as e:
+        logger.error(f"Task context oluşturma hatası - execution_id: {execution_id}, error: {e}")
         return {}
 
 def get_table_info(db_path, table_name):

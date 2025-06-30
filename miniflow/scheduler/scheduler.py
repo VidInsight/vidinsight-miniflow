@@ -1,6 +1,10 @@
 import time
 import threading
 
+# Logger setup
+import logging
+logger = logging.getLogger("miniflow.scheduler")
+
 from .. import database
 from .input_monitor import MiniflowInputMonitor
 from .output_monitor import MiniflowOutputMonitor
@@ -61,27 +65,37 @@ class WorkflowScheduler:
         Amaç: Scheduler'ı ve tüm monitor'ları başlatır
         Döner: Başarı durumu (True/False)
         """
+        logger.info("Scheduler başlatılıyor")
+        
         if self.running:
+            logger.warning("Scheduler zaten çalışıyor")
             return False
         
         # Database bağlantı kontrolü
+        logger.debug("Database bağlantısı kontrol ediliyor")
         connection_result = database.check_database_connection(self.db_path)
         if not connection_result.success:
+            logger.error(f"Database bağlantı hatası: {connection_result.error}")
             return False
         
         try:
             # CRITICAL FIX: Start manager FIRST before monitors
+            logger.debug("Parallelism engine manager başlatılıyor")
             self.manager.start()
             
             # Sequential startup - Queue monitor önce başlar
+            logger.info("Input monitor başlatılıyor")
             queue_started = self.queue_monitor.start()
             if not queue_started:
+                logger.error("Input monitor başlatılamadı")
                 self.manager.shutdown()  # Clean shutdown
                 return False
             
             # Result monitor sonra başlar
+            logger.info("Output monitor başlatılıyor")
             result_started = self.result_monitor.start()
             if not result_started:
+                logger.error("Output monitor başlatılamadı - rollback yapılıyor")
                 self.queue_monitor.stop()  # Rollback
                 self.manager.shutdown()    # Clean shutdown
                 return False
@@ -90,11 +104,14 @@ class WorkflowScheduler:
             self.running = True
             
             # Health monitoring başlat
+            logger.debug("Health monitoring başlatılıyor")
             self.start_health_monitoring()
             
+            logger.info("Scheduler başarıyla başlatıldı")
             return True
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"Scheduler başlatma hatası: {e}")
             self.stop()  # Cleanup on error
             return False
 
@@ -103,27 +120,36 @@ class WorkflowScheduler:
         Amaç: Scheduler'ı ve tüm monitor'ları durdurur
         Döner: Yok
         """
+        logger.info("Scheduler durduruluyor")
+        
         if not self.running:
+            logger.debug("Scheduler zaten durdurulmuş")
             return
         
         self.running = False
         
         # Health monitoring'i durdur
+        logger.debug("Health monitoring durduruluyor")
         self.stop_health_monitoring()
 
+        logger.debug("Parallelism engine manager kapatılıyor")
         self.manager.shutdown()
 
         # Sequential shutdown - Result monitor önce durur
         try:
+            logger.debug("Output monitor durduruluyor")
             self.result_monitor.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Output monitor durdurma hatası: {e}")
         
         # Queue monitor sonra durur
         try:
+            logger.debug("Input monitor durduruluyor")
             self.queue_monitor.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Input monitor durdurma hatası: {e}")
+        
+        logger.info("Scheduler başarıyla durduruldu")
 
     def is_running(self):
         """
@@ -186,28 +212,37 @@ class WorkflowScheduler:
         Amaç: Periyodik health check döngüsü
         Döner: Yok (sonsuz döngü)
         """
+        logger.debug("Health check döngüsü başlatıldı")
         restart_attempts = 0
         
         while self.running:
             try:
                 # Health check yap
                 if not self.check_health():
+                    logger.warning(f"Health check başarısız - restart attempt: {restart_attempts + 1}/{self.max_restart_attempts}")
                     if self.auto_recovery_enabled and restart_attempts < self.max_restart_attempts:
                         restart_attempts += 1
+                        logger.info("Auto-recovery başlatılıyor")
                         self.attempt_recovery()
                     else:
                         # Max restart attempts aşıldı, scheduler'ı durdur
+                        logger.error("Max restart attempts aşıldı - scheduler durduruluyor")
                         self.running = False
                         break
                 else:
                     # Health check başarılı, restart counter'ı sıfırla
+                    if restart_attempts > 0:
+                        logger.info("Health check başarılı - restart counter sıfırlandı")
                     restart_attempts = 0
                 
                 # Health check interval bekle
                 time.sleep(self.health_check_interval)
                 
-            except Exception:
+            except Exception as e:
+                logger.error(f"Health check döngüsü hatası: {e}")
                 time.sleep(1)
+        
+        logger.debug("Health check döngüsü sonlandırıldı")
 
     def check_health(self):
         """
@@ -218,19 +253,24 @@ class WorkflowScheduler:
             # Database bağlantısını kontrol et
             db_check = database.check_database_connection(self.db_path)
             if not db_check.success:
+                logger.warning("Health check - database bağlantı problemi")
                 return False
             
             # Queue monitor kontrolü
             if not self.queue_monitor.is_running():
+                logger.warning("Health check - input monitor çalışmıyor")
                 return False
             
             # Result monitor kontrolü
             if not self.result_monitor.is_running():
+                logger.warning("Health check - output monitor çalışmıyor")
                 return False
             
+            logger.debug("Health check başarılı - tüm bileşenler sağlıklı")
             return True
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"Health check hatası: {e}")
             return False
 
     def attempt_recovery(self):
@@ -238,24 +278,34 @@ class WorkflowScheduler:
         Amaç: Başarısız monitor'ları yeniden başlatmaya çalışır
         Döner: Recovery başarı durumu (True/False)
         """
+        logger.info("Recovery işlemi başlatılıyor")
+        
         try:
             # Queue monitor recovery
             if not self.queue_monitor.is_running():
+                logger.info("Input monitor recovery başlatılıyor")
                 self.queue_monitor.stop()
                 time.sleep(1)
                 if not self.queue_monitor.start():
+                    logger.error("Input monitor recovery başarısız")
                     return False
+                logger.info("Input monitor başarıyla recovery yapıldı")
             
             # Result monitor recovery
             if not self.result_monitor.is_running():
+                logger.info("Output monitor recovery başlatılıyor")
                 self.result_monitor.stop()
                 time.sleep(1)
                 if not self.result_monitor.start():
+                    logger.error("Output monitor recovery başarısız")
                     return False
+                logger.info("Output monitor başarıyla recovery yapıldı")
             
+            logger.info("Recovery işlemi başarıyla tamamlandı")
             return True
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"Recovery işlemi hatası: {e}")
             return False
 
     def update_configuration(self, queue_interval=None, result_interval=None, 
