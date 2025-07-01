@@ -26,91 +26,89 @@ def split_variable_path(path: str):
     return parts[0], None
 
 def find_node_id(db_path, execution_id, node_name):
-    """
-    Find node_id for a given execution_id and node_name.
-    First gets workflow_id from executions table, then finds node_id from nodes table.
-    
-    Args:
-        db_path (str): Database path
-        execution_id (str): Execution ID
-        node_name (str): Node name
-        
-    Returns:
-        str: Node ID if found, None otherwise
-    """
     logger.debug(f"Node ID aranıyor - execution_id: {execution_id}, node_name: {node_name}")
     
-    # First get workflow_id from executions table using index
+    # ------------------------------------------------------------
+    # 1. Execution ID üzerindne Workflow ID çek
+    # ------------------------------------------------------------
     workflow_query = """
     SELECT e.workflow_id 
     FROM executions e
     WHERE e.id = ? AND e.status != 'failed'
     """
-    workflow_result = fetch_one(db_path=db_path,
-                              query=workflow_query, 
-                              params=(execution_id,))
+    workflow_result = fetch_one(
+        db_path=db_path,
+        query=workflow_query, 
+        params=(execution_id,)
+        )
     
     if not workflow_result.success or not workflow_result.data:
+        # TODO: Workflow ID bulunamadı hatası
         logger.warning(f"Workflow bulunamadı - execution_id: {execution_id}")
         return None
         
     workflow_id = workflow_result.data.get('workflow_id')
     logger.debug(f"Workflow bulundu - workflow_id: {workflow_id}")
     
-    # Then find node_id from nodes table using index
+    # ------------------------------------------------------------
+    # 2. Workfow ID ve Node Name üzerinden Node ID bul
+    # ------------------------------------------------------------
     node_query = """
     SELECT n.id 
     FROM nodes n
     WHERE n.workflow_id = ? AND n.name = ?
     """    
-    node_result = fetch_one(db_path=db_path,
-                          query=node_query, 
-                          params=(workflow_id, node_name))
+    node_result = fetch_one(
+        db_path=db_path,
+        query=node_query, 
+        params=(workflow_id, node_name)
+        )
     
     if not node_result.success or not node_result.data:
+        # TODO: Noede ID bulunamadı hatası
         logger.warning(f"Node bulunamadı - workflow_id: {workflow_id}, node_name: {node_name}")
         return None
-        
+    
     node_id = node_result.data.get('id')
     logger.debug(f"Node bulundu - node_id: {node_id}")
     return node_id
 
 def get_result_data_for_node(db_path, execution_id, node_id):
-    """
-    Get result data for a node from execution_results table.
-    
-    Args:
-        db_path (str): Database path
-        execution_id (str): Execution ID
-        node_id (str): Node ID
-        
-    Returns:
-        dict: Result data if successful, empty dict otherwise
-    """
     logger.debug(f"Result data alınıyor - execution_id: {execution_id}, node_id: {node_id}")
-    
+
+    # ------------------------------------------------------------
+    # 1. Execution Results tablosunda ilgili düğümü çek
+    # ------------------------------------------------------------
     query = """
     SELECT result_data, status, error_message
     FROM execution_results
     WHERE execution_id = ? AND node_id = ?
     LIMIT 1
     """
-    result = fetch_one(db_path=db_path,
-                      query=query, 
-                      params=(execution_id, node_id))
+    result = fetch_one(
+        db_path=db_path,
+        query=query, 
+        params=(execution_id, node_id)
+        )
     
     if not result.success or not result.data:
+        # TODO: Hata yönetimi
         logger.debug(f"Result data bulunamadı - execution_id: {execution_id}, node_id: {node_id}")
         return {}
         
     data = result.data
     
-    # Check if the execution was successful
+    # ------------------------------------------------------------
+    # 2. Execution başarılı mı kontrol et
+    # ------------------------------------------------------------
     if data.get('status') != 'success':
         error_msg = data.get('error_message', 'Unknown error')
         logger.warning(f"Node execution hatası - node_id: {node_id}, error: {error_msg}")
         return {"error": error_msg}
     
+    # ------------------------------------------------------------
+    # 3. Result datayı çek
+    # ------------------------------------------------------------
     if data.get('result_data'):
         try:
             parsed_data = json.loads(data['result_data'])
@@ -124,17 +122,6 @@ def get_result_data_for_node(db_path, execution_id, node_id):
     return {}
 
 def create_context(params_dict, execution_id, db_path):
-    """
-    Create context for a task by resolving dynamic values.
-    
-    Args:
-        params_dict (dict): Task parameters
-        execution_id (str): Execution ID
-        db_path (str): Database path
-        
-    Returns:
-        dict: Processed context with resolved values
-    """
     logger.debug(f"Context oluşturuluyor - execution_id: {execution_id}")
     
     # Extract dynamic values
@@ -174,17 +161,6 @@ def create_context(params_dict, execution_id, db_path):
     return params_dict
 
 def create_context_for_task(params_dict, execution_id, db_path):
-    """
-    Creates context for a task by processing the parameters and resolving dynamic values.
-    
-    Args:
-        params_dict (str): JSON string containing the parameters
-        execution_id (str): The execution ID
-        db_path (str): Path to the database
-        
-    Returns:
-        dict: Processed context with resolved dynamic values
-    """
     logger.debug(f"Task context oluşturuluyor - execution_id: {execution_id}")
     
     try:
@@ -210,45 +186,3 @@ def create_context_for_task(params_dict, execution_id, db_path):
     except Exception as e:
         logger.error(f"Task context oluşturma hatası - execution_id: {execution_id}, error: {e}")
         return {}
-
-def get_table_info(db_path, table_name):
-    """
-    Get table information with SQL injection protection.
-    
-    Args:
-        db_path (str): Database path
-        table_name (str): Name of the table to get info for
-        
-    Returns:
-        Result: Success with table info or error
-    """
-    try:
-        # Validate table name against known tables
-        valid_tables = [table_name for table_name, _ in ALL_TABLES]
-        if table_name not in valid_tables:
-            return Result.error(f"Invalid table name: {table_name}")
-        
-        # Safe to use f-string now since we validated the table name
-        result = fetch_all(db_path, f"PRAGMA table_info({table_name})")
-        
-        if not result.success:
-            return result
-        
-        columns = []
-        for row in result.data:
-            columns.append({
-                "name": row["name"],
-                "type": row["type"],
-                "not_null": bool(row["notnull"]),
-                "default_value": row["dflt_value"],
-                "primary_key": bool(row["pk"])
-            })
-        
-        return Result.success({
-            "table_name": table_name,
-            "columns": columns,
-            "column_count": len(columns)
-        })
-     
-    except Exception as e:
-        return Result.error(f"Failed to get table info for {table_name}: {str(e)}")

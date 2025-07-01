@@ -3,7 +3,6 @@ import json
 import time
 import threading
 import multiprocessing
-from queue import Queue as ThreadQueue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Logger setup
@@ -16,6 +15,9 @@ from . import context_manager
 
 class MiniflowInputMonitor:
     def __init__(self, db_path, polling_interval=0.1, manager=None, batch_size=50, worker_threads=4):
+        logger.debug("Input Monitor kuruluyor . . . ")
+        logger.debug(f"Input Monitor\n\tdb_path: {db_path}\n\tpooling interval: {polling_interval}\n\tbatch size: {batch_size}\n\tworker_thread: {worker_threads}")
+        
         # Veritabanı Parametreleri (SQLite için gerekli)
         self.db_path = db_path                                                                      # Veritabanı yolu
         self.polling_interval = polling_interval                                                    # Polling interval
@@ -26,11 +28,12 @@ class MiniflowInputMonitor:
         # Input Monitor Parametreleri
         self.batch_size = batch_size                                                                # Batch boyutu -> Kaçar Kaçar Görevler İşleme Alınacak
         self.worker_count = min(worker_threads, multiprocessing.cpu_count())                        # Worker sayısı -> Kaç eş zamanlı thread çalıştırılacak
+        logger.debug(f"Worker sayısı {self.worker_count} olarak belirlendi")
         self.running = False                                                                        # Çalışma durumu -> Modül çalışıyor mu?
         self.main_thread = None                                                                     # Ana thread 
         self.worker_pool = None                                                                     # Worker pool 
         self.shutdown_event = threading.Event()                                                     # Shutdown event
-        
+
         # Performans Metrikleri
         self.stats = {
             'tasks_processed': 0,                                                                   # İşlenen görev sayısı
@@ -46,37 +49,35 @@ class MiniflowInputMonitor:
         project_root = os.path.dirname(miniflow_dir)                                                # Proje kök dizini
         self.scripts_dir = os.path.join(project_root, 'scripts')                                    # Scripts dizini (Tam Yol)
         
+        logger.debug(f"Kullanılacak scripts yolu/path'i {self.scripts_dir}")
+        logger.debug("Input Monitor başraıyla kuruldu")
 
     def is_running(self):
-        """
-        DESC: Çalışma durumunu kontrol eder
-        RETURNS: Çalışıyorsa 'True', Çalışmıyorsa 'False'
-        """
         return self.running and self.main_thread and self.main_thread.is_alive()                   # Çalışıyorsa 'True', Çalışmıyorsa 'False'
     
     def get_stats(self):
-        """
-        DESC: Performans metriklerini döndürür
-        RETURNS: Performans metrikleri (dict)
-        """
         return {
             **self.stats,
-            'worker_threads': self.worker_count,                                                  # Worker sayısı
-            'batch_size': self.batch_size,                                                        # Batch boyutu
-            'running': self.running                                                               # Çalışma durumu
+            'worker_threads': self.worker_count,                                                    # Worker sayısı
+            'batch_size': self.batch_size,                                                          # Batch boyutu
+            'running': self.running                                                                 # Çalışma durumu
         } 
     
     def start(self):
-        """
-        DESC: Modülü başlatır
-        RETURNS: Başarılı ise 'True', Başarısız ise 'False'
-        """
-        logger.info("Input monitor başlatılıyor")
+        logger.debug("Input monitor başlatılıyor")
         
         if self.running:
             logger.warning("Input monitor zaten çalışıyor")
             return True
         
+         # Database connection check
+        logger.debug("Database bağlantısı kontrol ediliyor")
+        connection_result = database.check_database_connection(self.db_path)                       # Veritabanı bağlantısını kontrol et
+        if not connection_result.success:
+            logger.error(f"Database bağlantı hatası: {connection_result.error}")
+            return False
+        logger.debug("Database bağlantısı başarılı")
+
         self.running = True                                                                         # Çalışma durumunu True yap
         self.shutdown_event.clear()                                                                 # Shutdown event'i temizle -> ???
 
@@ -100,10 +101,6 @@ class MiniflowInputMonitor:
         return True
 
     def stop(self):
-        """
-        DESC: Modülü durdurur
-        RETURNS: Başarılı ise 'True', Başarısız ise 'False'
-        """
         logger.info("Input monitor durduruluyor")
         
         if not self.running:
@@ -113,7 +110,7 @@ class MiniflowInputMonitor:
         self.running = False                                                                         # Çalışma durumunu False yap
         self.shutdown_event.set()                                                                    # Shutdown event'i set et 
 
-         # Shutdown thread pool
+        # Shutdown thread pool
         if self.worker_pool:
             logger.debug("Worker pool kapatılıyor")
             self.worker_pool.shutdown(wait=True)                                                    # Worker pool'u shutdown et -> Worker threadleri durdurulur
@@ -124,15 +121,11 @@ class MiniflowInputMonitor:
             self.main_thread.join(timeout=5)                                                        # Ana thread'i beklemeye al -> 5 saniye bekler 
                                                                                                     # Ana thread'i durdur -> While sorgusu üzerinden çıkılır
 
-        logger.info("Input monitor başarıyla durduruldu")
+        logger.info("Input Monitor başarıyla durduruldu")
         return True
     
     def __monitoring_loop(self):
-        """
-        DESC: Ana işlem döngüsü -> Görevleri kontrol eder ve hazır olanları işleme alır
-        RETURNS: None
-        """
-        logger.info("Input monitor döngüsü başlatıldı")
+        logger.info("Input Monitor ana işlem döngüsü başlatıldı")
 
         while self.running and not self.shutdown_event.is_set():                                    
             try:
@@ -155,7 +148,8 @@ class MiniflowInputMonitor:
 
                 # Eğer görevleri çekemediysen, polling interval'e göre bekle
                 if not ready_tasks.success:
-                    logger.debug("Hazır görevler alınırken hata oluştu")
+                    logger.warning("Hazır görevler alınırken hata oluştu")
+                    logger.debug(f"{self.polling_interval} kadar işleme ara veriliyor")
                     time.sleep(self.polling_interval)
                     continue
 
@@ -175,29 +169,32 @@ class MiniflowInputMonitor:
                 logger.error(f"Input monitor döngü hatası: {e}")
                 time.sleep(1)
         
-        logger.info("Input monitor döngüsü sonlandırıldı")
+        logger.debug("Input monitor döngüsü sonlandırıldı")
 
     def __send_tasks(self, tasks):
-        """
-        DESC: Görevleri işleme alır ve parallelism engine'e gönderir
-        RETURNS: None
-        """
         if not tasks:
             return
         
         # Check if manager is available
         if not self.manager:
-            print("[INPUT_MONITOR] ERROR: No manager available")
-            logger.error("Manager mevcut değil")
-            return
+            logger.error("Görev gönderimi için Manager mevcut değil")
+            raise ValueError("Input Monitor için Manager mecvut değil")
         
-        print(f"[INPUT_MONITOR] Processing {len(tasks)} ready tasks")
         logger.info(f"{len(tasks)} hazır görev işleniyor")
 
+        # ------------------------------------------------------------
+        # 1. Her görev (task) için context oluştur
+        # Thread Pool üzeirnde multithread olarak gerçekleştir
+        # ------------------------------------------------------------
         payload_futures = []                                                                  
         for task in tasks:
             future = self.worker_pool.submit(self.__create_task_payload, task) 
             payload_futures.append(future)
+
+        # ------------------------------------------------------------
+        # 2. Threadlerden gelen çıktıları topla
+        # Future yapısı ile işlem gerçekleştiriliyor
+        # ------------------------------------------------------------
 
         prepared_payloads = []
         task_ids = []
@@ -208,26 +205,29 @@ class MiniflowInputMonitor:
                 if payload:
                     prepared_payloads.append(payload)
                     task_ids.append(payload['task_id'])
-                    print(f"[INPUT_MONITOR] Prepared payload for task: {payload['node_name']}")
                     logger.debug(f"Payload hazırlandı - task: {payload['node_name']}")
             except Exception as e:
-                print(f"[INPUT_MONITOR] Error creating payload: {e}")
                 logger.error(f"Payload oluşturma hatası: {e}")
 
-        self.stats['parallel_operations'] += len(payload_futures)
-        print(f"[INPUT_MONITOR] Prepared {len(prepared_payloads)} payloads from {len(tasks)} tasks")
         logger.info(f"{len(prepared_payloads)} payload hazırlandı ({len(tasks)} task'dan)")
         
+        # ------------------------------------------------------------
+        # 3. Görevleri Execution Engine'a işleme gönder
+        # Manager üzerinde gerçekleştilriyor
+        # ------------------------------------------------------------
+
         if prepared_payloads:
-            # Send tasks to parallelism engine
-            print(f"[INPUT_MONITOR] Sending {len(prepared_payloads)} tasks to parallelism engine")
+            # ------------------------------------------------------------
+            # 3.1 Görevleri Execution Engine'a bulk olrak gönder
+            # ------------------------------------------------------------
             logger.info(f"{len(prepared_payloads)} task parallelism engine'e gönderiliyor")
-            success = self.manager.put_items_bulk(prepared_payloads)
-            print(f"[INPUT_MONITOR] Bulk send result: {success}")
+            success = self.manager.put_items_bulk(prepared_payloads)                                # Hazır işlemleri motor'a gönder
             logger.debug(f"Bulk gönderim sonucu: {success}")
             
             if success:
-                # Mark tasks as running and remove from queue
+                # ------------------------------------------------------------
+                # 3.2 Göreve gönderilen görevleri tablodan sil
+                # ------------------------------------------------------------
                 delete_operations = [
                     {
                         'type': 'delete',
@@ -237,34 +237,22 @@ class MiniflowInputMonitor:
                     for task_id in task_ids
                 ]
                 
-                print(f"[INPUT_MONITOR] Removing {len(task_ids)} tasks from queue")
                 logger.debug(f"{len(task_ids)} task kuyruktan kaldırılıyor")
                 delete_result = database.execute_bulk_operations(self.db_path, delete_operations)
                 if delete_result.success:
-                    self.stats['tasks_processed'] += len(prepared_payloads)
-                    self.stats['batches_processed'] += 1
-                    self.stats['queue_operations'] += 1
-                    self.stats['database_operations'] += 1
-                    print(f"[INPUT_MONITOR] Successfully processed {len(prepared_payloads)} tasks")
                     logger.info(f"{len(prepared_payloads)} task başarıyla işlendi")
                 else:
-                    print(f"[INPUT_MONITOR] Failed to remove tasks from queue: {delete_result.error}")
                     logger.error(f"Task'lar kuyruktan kaldırılamadı: {delete_result.error}")
             else:
-                print(f"[INPUT_MONITOR] Failed to send tasks to parallelism engine")
                 logger.error("Task'lar parallelism engine'e gönderilemedi")
         else:
-            print(f"[INPUT_MONITOR] No payloads prepared from {len(tasks)} tasks")
             logger.warning(f"{len(tasks)} task'dan hiç payload hazırlanamadı")
 
     def __create_task_payload(self, task):
-        """
-        DESC: Görevleri işleme alır ve parallelism engine'e gönderir
-        RETURNS: None
-        """
-
         try:
-            # Get node info (this will use connection pool)
+            # ------------------------------------------------------------
+            # 1. Verilen görevin (task) id'si üzerinden görevi çek
+            # ------------------------------------------------------------
             node_result = database.fetch_one(
                 self.db_path,
                 "SELECT id, workflow_id, name, type, script, params FROM nodes WHERE id = ?",
@@ -277,7 +265,9 @@ class MiniflowInputMonitor:
             
             node_info = node_result.data
             
-            # Parse parameters
+            # ------------------------------------------------------------
+            # 2. Düğümüm parametre değerlerini çek - variables
+            # ------------------------------------------------------------
             params_dict = database.safe_json_loads(node_info.get('params', '{}'))
             if isinstance(params_dict, str):
                 try:
@@ -285,14 +275,18 @@ class MiniflowInputMonitor:
                 except json.JSONDecodeError:
                     params_dict = {}
             
-            # Create context (this can be optimized further with bulk operations)
+            # ------------------------------------------------------------
+            # 3. Düğüm için payload oluştur - context manager
+            # ------------------------------------------------------------
             context = context_manager.create_context_for_task(
                 params_dict,
                 task['execution_id'],
                 self.db_path
             )
             
-            # Build payload
+            # ------------------------------------------------------------
+            # 4. Çıktılar ile JSON/DICT payload oluştur
+            # ------------------------------------------------------------
             task_payload = {
                 "task_id": task['id'],
                 "execution_id": task['execution_id'],
