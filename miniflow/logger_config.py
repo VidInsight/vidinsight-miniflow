@@ -1,3 +1,4 @@
+import os
 import shutil
 import logging.config
 from pathlib import Path
@@ -27,17 +28,33 @@ def cleanup_old_logs(max_folders=5):
 class FlushingFileHandler(logging.FileHandler):
     """
     Real-time logging için custom FileHandler
-    Her log mesajından sonra dosyayı flush eder
+    Her log mesajından sonra dosyayı flush eder ve OS buffer'larını da boşaltır
     """
+    def __init__(self, filename, mode='a', encoding=None, delay=False, errors=None):
+        # Line buffering ile hızlı yazma
+        super().__init__(filename, mode, encoding, delay, errors)
+        # Stream'i line-buffered modda yeniden aç
+        if hasattr(self.stream, 'fileno'):
+            # Mevcut dosyayı kapat
+            self.stream.close()
+            # Line-buffered modda yeniden aç (text I/O için uygun)
+            self.stream = open(filename, mode, encoding=encoding, buffering=1)
+
     def emit(self, record):
         super().emit(record)
-        self.flush()  # Her log mesajından sonra flush et
+        self.flush()  # Python seviyesinde flush
+        # OS kernel buffer'larını da flush et
+        if hasattr(self.stream, 'fileno'):
+            try:
+                os.fsync(self.stream.fileno())  # Kernel buffer'larını disk'e yaz
+            except (OSError, AttributeError):
+                pass  # Hata durumunda sessizce devam et
 
 
 def setup_logging() -> Path:
     """Log sistemini başlat; timestamp'li klasör oluştur ve log dosyalarını içine yerleştir."""
-    # Timestamp'li klasör oluştur
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Günlük bazlı klasör oluştur (aynı gün tüm komutlar aynı klasörü kullanır)
+    timestamp = datetime.now().strftime("%Y%m%d")
     log_dir = Path("logs") / timestamp
     log_dir.mkdir(parents=True, exist_ok=True)
     
@@ -75,6 +92,7 @@ def setup_logging() -> Path:
                 "filename": str(log_dir / "main.log"),
                 "mode": "a",
                 "encoding": "utf-8",
+                "delay": False,  # Hemen aç, geciktirme
             },
             # Input Monitor - Real-time Dosya Handler
             "file_input_monitor": {
@@ -84,6 +102,7 @@ def setup_logging() -> Path:
                 "filename": str(log_dir / "input_monitor.log"),
                 "mode": "a",
                 "encoding": "utf-8",
+                "delay": False,  # Hemen aç, geciktirme
             },
             # Output Monitor - Real-time Dosya Handler
             "file_output_monitor": {
@@ -93,6 +112,7 @@ def setup_logging() -> Path:
                 "filename": str(log_dir / "output_monitor.log"),
                 "mode": "a",
                 "encoding": "utf-8",
+                "delay": False,  # Hemen aç, geciktirme
             },
         },
 
