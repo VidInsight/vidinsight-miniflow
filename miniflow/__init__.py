@@ -16,8 +16,6 @@ from . import database
 from .scheduler import (
     MiniflowInputMonitor,
     MiniflowOutputMonitor,
-    WorkflowScheduler,
-    create_scheduler,
     create_context_for_task,
     create_context,
     extract_dynamic_values,
@@ -34,11 +32,9 @@ __all__ = [
     # Database module
     'database',
     
-    # Scheduler components
+    # Scheduler components  
     'MiniflowInputMonitor',
     'MiniflowOutputMonitor',
-    'WorkflowScheduler',
-    'create_scheduler',
     
     # Context management
     'create_context_for_task',

@@ -1,38 +1,37 @@
 import time
 import threading
 import multiprocessing
-from queue import Queue as ThreadQueue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Logger setup
+import logging
+logger = logging.getLogger("miniflow.scheduler.output_monitor")
+
 from .. import database
-from ..database.core import execute_bulk_operations
 from ..database.functions.workflow_orchestration import process_execution_result
 
-# TODO: Logger setup eklenecek
 
 class MiniflowOutputMonitor:
     def __init__(self, db_path, polling_interval=0.5, manager=None, batch_size=25, worker_threads=4):
-        # Database Params
+        logger.debug("Output Monitor kuruluyor . . . ")
+        logger.debug(f"Output Monitor\n\tdb_path: {db_path}\n\tpooling interval: {polling_interval}\n\tbatch size: {batch_size}\n\tworker_thread: {worker_threads}")
+        
+        # Veritabanı Parametreleri (SQLite için gerekli)
         self.db_path = db_path
         self.polling_interval = polling_interval
 
-        # Engine Params
+        # Execution Engine Manager
         self.manager = manager
-        # TODO: Manager kontrolü eklenecek
 
+        # Output Monitor Parametreleri
         self.batch_size = batch_size
         self.worker_count = min(worker_threads, multiprocessing.cpu_count())
-        
-
-        # Sınıf Params
         self.running = False
         self.main_thread = None
         self.worker_pool = None
-        self.shutdown_event = threading.Event() # TODO: Araştırılacak
+        self.shutdown_event = threading.Event() 
 
-        # TODO: Retry - Error Queue
-
-         # Performance monitoring
+        # Performans Metrikleri
         self.stats = {
             'results_processed': 0,
             'batches_processed': 0,
@@ -42,24 +41,18 @@ class MiniflowOutputMonitor:
             'webhook_notifications': 0
         }
 
-        # Adaptive polling
+        # Adaptive polling parametreleri
         self.min_polling_interval = 0.1
         self.max_polling_interval = 2.0
         self.current_polling_interval = polling_interval
         self.empty_cycles = 0
 
+        logger.debug("Output Monitor başraıyla kuruldu")
+
     def is_running(self):
-        """
-        DESC:
-        RETURNS:
-        """
         return self.running and self.main_thread and self.main_thread.is_alive()
     
     def get_stats(self):
-        """
-        DESC:
-        RETURNS:
-        """
         return {
             **self.stats,
             'worker_threads': self.worker_count,
@@ -70,154 +63,163 @@ class MiniflowOutputMonitor:
         } 
 
     def start(self):
-        """
-        DESC:
-        RETURNS:
-        """
+        logger.debug("Output monitor başlatılıyor")
+        
         if self.running:
-            # TODO: Logger - warning
+            logger.warning("Output monitor zaten çalışıyor")
             return True
 
         # Database connection check
+        logger.debug("Database bağlantısı kontrol ediliyor")
         connection_result = database.check_database_connection(self.db_path)
         if not connection_result.success:
-            # TODO: Logger - error
+            logger.error(f"Database bağlantı hatası: {connection_result.error}")
             return False
+        logger.debug("Database bağlantısı başarılı")
         
         self.running = True
         self.shutdown_event.clear() 
 
-        self.worker_pool = ThreadPoolExecutor(max_workers=self.worker_count, 
-                                              thread_name_prefix="OutputWorker")
+        # Initialize thread pool for workers
+        logger.debug(f"Worker pool oluşturuluyor - max_workers: {self.worker_count}")
+        self.worker_pool = ThreadPoolExecutor(
+            max_workers=self.worker_count, 
+            thread_name_prefix="OutputWorker"
+            )
 
-        self.main_thread = threading.Thread(target=self.__monitoring_loop, 
-                                            name="OutputMonitorThread",
-                                            daemon=True)
+        # Start main monitoring thread
+        logger.debug("Output monitor ana thread başlatılıyor")
+        self.main_thread = threading.Thread(
+            target=self.__monitoring_loop, 
+            name="OutputMonitorThread",daemon=True
+            )
         self.main_thread.start()
 
-        # TOODO: Logger - info
+        logger.info("Output monitor başarıyla başlatıldı")
         return True
     
     def stop(self):
-        """
-        DESC:
-        RETURNS:
-        """
+        logger.info("Output monitor durduruluyor")
+        
         if not self.running:
-            # TODO: Logger - warning
+            logger.debug("Output monitor zaten durdurulmuş")
             return True
         
         self.running = False
         self.shutdown_event.set()
-
+        
+        # Shutdown thread pool
         if self.worker_pool:
+            logger.debug("Worker pool kapatılıyor")
             self.worker_pool.shutdown(wait=True)
-
+        
+        # Wait for main thread
         if self.main_thread and self.main_thread.is_alive():
+            logger.debug("Ana thread sonlandırılması bekleniyor")
             self.main_thread.join(timeout=5)
 
-        # TODO: Logger - info
+        logger.info("Output Monitor başarıyla durduruldu")
         return True
     
     def __monitoring_loop(self):
-        """
-        DESC: Main monitoring loop for result collection
-        RETURNS: None
-        """
-        print("[OUTPUT_MONITOR] Starting monitoring loop")
+        logger.info("Output Monitor ana işlem döngüsü başlatıldı")
         while self.running and not self.shutdown_event.is_set():
             try:
+                # ------------------------------------------------------------
+                # 1. Görevleri Execution Engine üzerinen toplar
+                # ------------------------------------------------------------
                 results = self.__collect_results()
 
                 if not results:
+                    # ------------------------------------------------------------
+                    # 1.1 Eğer herhangi bir sonuç yoksa srogu aralığını düşür
+                    # ------------------------------------------------------------
                     self.empty_cycles += 1
                     self.__adjust_polling_interval(idle=True)
                     time.sleep(self.current_polling_interval)
                     continue
-
+                
+                # ------------------------------------------------------------
+                # 1.2 Görevleri kontrol eder ve hazır olanları işleme alır 
+                # ------------------------------------------------------------
                 self.empty_cycles = 0
                 self.__adjust_polling_interval(idle=False)
 
-                print(f"[OUTPUT_MONITOR] Got {len(results)} results to process")
+                logger.debug(f"{len(results)} sonuç işleme için alındı")
 
-                self.__process_results(results) # Sonuçların işlenmesi
+                # ------------------------------------------------------------
+                # 2. Gelen çıktıları veri tabanına işle
+                # ------------------------------------------------------------
+                self.__process_results(results)
                 time.sleep(self.current_polling_interval)
             except Exception as e:  
-                print(f"[OUTPUT_MONITOR] Error in monitoring loop: {e}")
+                logger.error(f"Output monitor döngü hatası: {e}")
                 time.sleep(1)
 
-        print("[OUTPUT_MONITOR] Monitoring loop ended")
-
+        logger.debug("Output monitor döngüsü sonlandırıldı")
 
     def __collect_results(self):
-        """
-        DESC: Collect results from parallelism engine
-        RETURNS: List of valid results
-        """
         if not self.manager:
-            print("[OUTPUT_MONITOR] ERROR: Manager is not set")
-            raise ValueError("Manager is not set. Cannot collect results.")
+            logger.error("Manager mevcut değil")
+            raise ValueError("Output Monitor için Manager mecvut değil")
         
-        # 1. Manager üzerindne çıktı öğelerini topla
+        # ------------------------------------------------------------
+        # 1. Manager üzerinden sonlanmış işlemleri çek
+        # ------------------------------------------------------------
         raw_results = self.manager.get_output_items_bulk(
                 max_items=self.batch_size, 
                 timeout=0.1
-            )
+                )
         
-        print(f"[OUTPUT_MONITOR] Collected {len(raw_results)} raw results from manager")
+        logger.debug(f"Manager'dan {len(raw_results)} ham sonuç toplandı")
 
+        # ------------------------------------------------------------
+        # 2. Çıtıları valide et
+        # ------------------------------------------------------------
         valid_results = []
         for result in raw_results:
             if self.__validate_result_format(result):
                 valid_results.append(result)
-                print(f"[OUTPUT_MONITOR] Valid result for node: {result.get('node_id', 'unknown')}")
+                logger.debug(f"Geçerli sonuç - node: {result.get('node_id', 'unknown')}")
             else:
-                print(f"[OUTPUT_MONITOR] Invalid result format: {result}")
+                logger.warning(f"Geçersiz sonuç formatı: {result}")
                 self.stats['failed_results'] += 1   
 
-        print(f"[OUTPUT_MONITOR] Validated {len(valid_results)} results")
+        logger.info(f"{len(valid_results)} sonuç doğrulandı")
         return valid_results
 
     def __validate_result_format(self, result):
-        """
-        DESC: Validate result format from parallelism engine
-        RETURNS: bool
-        """
         if not isinstance(result, dict):
-            print(f"[OUTPUT_MONITOR] Result is not dict: {type(result)}")
+            logger.debug(f"Sonuç dict değil: {type(result)}")
             return False
         
         required_fields = ['execution_id', 'node_id', 'status']
         for field in required_fields:
             if field not in result:
-                print(f"[OUTPUT_MONITOR] Missing required field: {field}")
+                logger.debug(f"Gerekli alan eksik: {field}")
                 return False
             
         if result['status'] not in ['success', 'failed']:
-            print(f"[OUTPUT_MONITOR] Invalid status: {result['status']}")
+            logger.debug(f"Geçersiz status: {result['status']}")
             return False
         
         # Accept either 'results' or 'result_data' field
         if 'results' not in result and 'result_data' not in result:
-            print(f"[OUTPUT_MONITOR] Missing result data (neither 'results' nor 'result_data')")
+            logger.debug("Result data eksik (ne 'results' ne de 'result_data' var)")
             return False
         
         return True
-
-        # TODO: Valid olmayan sonuçlar için çözüm
     
     def __adjust_polling_interval(self, idle=False):
-        """
-        DESC:
-        RETURNS:
-        """
         if idle:
+            logger.debug("Pooling Interval aralığı arttırılıyor")
             # Increase interval when idle (up to max)
             self.current_polling_interval = min(
                 self.current_polling_interval * 1.2,
                 self.max_polling_interval
             )
         else:
+            logger.debug("Pooling Interval aralığı azaltılıyor")
             # Decrease interval when busy (down to min)
             self.current_polling_interval = max(
                 self.current_polling_interval * 0.8,
@@ -225,13 +227,12 @@ class MiniflowOutputMonitor:
             )
 
     def __process_results(self, results):
-        """
-        DESC:
-        RETURNS:
-        """
         if not results:
             return
         
+        # ------------------------------------------------------------
+        # 1. Execution Id üzerinden görevleri gruplandır
+        # ------------------------------------------------------------
         execution_groups = {}
         for result in results:
             execution_id = result.get('execution_id')
@@ -239,6 +240,9 @@ class MiniflowOutputMonitor:
                 execution_groups[execution_id] = []
             execution_groups[execution_id].append(result)
 
+        # ------------------------------------------------------------
+        # 2. Grupları multithreading ile veri tabanına işle
+        # ------------------------------------------------------------
         futures = []
         for execution_id, group_result in execution_groups.items():
             future = self.worker_pool.submit(
@@ -247,6 +251,9 @@ class MiniflowOutputMonitor:
             )
             futures.append(future)
 
+        # ------------------------------------------------------------
+        # 3. İşlem çıktılarını thread'lerden topla
+        # ------------------------------------------------------------
         successful_results = 0
         failed_results = 0
 
@@ -256,21 +263,12 @@ class MiniflowOutputMonitor:
                 successful_results += success_count
                 failed_results += fail_count
             except Exception as e:
-                print(f"[OUTPUT_MONITOR] Exception in future processing: {e}")
+                logger.error(f"Future işleme hatası: {e}")
                 failed_results += 1
 
-        # Update statistics
-        self.stats['results_processed'] += successful_results
-        self.stats['failed_results'] += failed_results
-        self.stats['batches_processed'] += 1
-
-        # TODO: Logger - info
+        logger.info(f"Sonuç işleme tamamlandı - başarılı: {successful_results}, başarısız: {failed_results}")
         
     def __process_execution_group(self, group_result):
-        """
-        DESC:
-        RETURNS:
-        """
         success_count = 0
         fail_count = 0
 
@@ -278,9 +276,8 @@ class MiniflowOutputMonitor:
             try:
                 # Handle both 'results' and 'result_data' field names
                 result_data = result.get("result_data") or result.get("results")
-                
-                print(f"[OUTPUT_MONITOR] Processing result for node {result['node_id']}: status={result['status']}")
-                
+
+                # Sonuçları veri tabanına işle          
                 orchestration_result = process_execution_result(
                     db_path=self.db_path,
                     execution_id=result["execution_id"],
@@ -290,21 +287,15 @@ class MiniflowOutputMonitor:
                     error_message=result.get("error_message")
                 )
 
-                self.stats['database_operations'] += 1
-
                 if orchestration_result.success:
                     success_count += 1
-                    print(f"[OUTPUT_MONITOR] Successfully processed result for node {result['node_id']}")
                 else:
                     fail_count += 1
-                    print(f"[OUTPUT_MONITOR] Failed to process result for node {result['node_id']}: {orchestration_result.error}")
 
             except Exception as e:
-                print(f"[OUTPUT_MONITOR] Exception processing result for node {result.get('node_id', 'unknown')}: {e}")
                 fail_count += 1
 
         return success_count, fail_count
+    
 
-
-
-
+# TODO: Invalid çıktılar ile ilgili herhangi bir işlem yapılmıyor
