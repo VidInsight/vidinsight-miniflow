@@ -1,16 +1,15 @@
 import json
-import threading
 import time
-from multiprocessing import cpu_count, Pipe
-from threading import Thread
-from ..process import BaseProcess
-from ..queue_module import BaseQueue
 import psutil
+from ..process import BaseProcess
+from threading import Thread, Lock, Event
+from multiprocessing import cpu_count, Pipe
 
 
-class QueueWatcher:
-    def __init__(self, input_queue: BaseQueue, output_queue: BaseQueue, os: bool):
-        self.input_queue = input_queue
+
+class ProcessController:
+    def __init__(self, output_queue, os: bool):
+        self.output_queue = output_queue
         self.output_queue = output_queue
         self.max_cpu_count = cpu_count() - 1
         self.min_process_count = 2
@@ -19,12 +18,11 @@ class QueueWatcher:
         self.started = False
         self.scaler_thread = None
         self.thread_count_list = []
-        self.process_index = 0
-        self.shutdown_event = threading.Event()
-        self.process_lock = threading.Lock()
+        self.shutdown_event = Event()
+        self.process_lock = Lock()
+        self.auto_scale = False
         self.current_process_index = 0  # Round-robin selection
         self.priority = -19 if os else psutil.HIGH_PRIORITY_CLASS  # self._unix_process_classes() if os else self._nt_process_classes()
-        print(f"QueueWatcher started with priority {self.priority}")
 
     def start(self):
         """Sadece bir kez başlatılabilir"""
@@ -32,76 +30,12 @@ class QueueWatcher:
             raise RuntimeError("QueueWatcher already started")
 
         self.started = True
-        self._start_processes(self.min_process_count)  # Sadece burada başlat
-        self._start_watch_threads(self._watch_input)
-
-    def _watch_input(self):
-        """Input Queue tracker"""
-        while not self.shutdown_event.is_set():
-            try:
-                # Non-blocking get with timeout
-                item = self.input_queue.get_with_timeout(timeout=1.0)
-                if item is not None:
-                    with self.process_lock:  # Thread-safe process assignment
-                        if len(self.active_processes) > 0:
-                            self._create_thread(item)
-                            time.sleep(1.5)
-                        else:
-                            # Re-queue item if no processes available
-                            self.input_queue.put(item)
-
-            except Exception as e:
-                print(f"Input watcher error: {e}")
-
-    def _get_process_thread_counts(self):
-        thread_counts = []
-        with self.process_lock:
-            for proc_dict in self.active_processes:
-                try:
-                    proc_dict['health_pipe'].send({"command": "get_thread_count"})
-                    if proc_dict['health_pipe'].poll():  # 1 sn timeout
-                        resp = proc_dict['health_pipe'].recv()
-                        thread_counts.append(resp.get("thread_count", 0))
-                    else:
-                        thread_counts.append(None)
-                except Exception as e:
-                    print(f"Error getting thread count: {e}")
-                    thread_counts.append(None)
-        return thread_counts
-
-    def _get_next_process(self):
-        """Select the process with the lowest thread count"""
-        if not self.active_processes or None in self.thread_count_list:
-            return None
-
-        max_thread = 3
-
-        thread_count_list = self.thread_count_list
-        selected_process = None
-
-        """if sum(thread_count_list) >= max_thread * self.max_cpu_count:
-            selected_process = self.active_processes[self.process_index]
-            self.process_index = (self.process_index + 1) % self.max_cpu_count
-
+        if self.auto_scale:
+            self._start_processes(self.min_process_count)
         else:
-            for thread_count in thread_count_list:
-                if thread_count < max_thread:
-                    print("[PROCESS SELECTION] Select process with thread count", thread_count, max_thread)
-                    index = thread_count_list.index(thread_count)
-                    selected_process = self.active_processes[index]
-                    self.process_index = index"""
+            self._start_processes(self.max_cpu_count)
 
-        for thread_count in thread_count_list:
-            if thread_count < max_thread:
-                print("[PROCESS SELECTION] Select process with thread count", thread_count, max_thread)
-                index = thread_count_list.index(thread_count)
-                selected_process = self.active_processes[index]
-                self.process_index = index
-
-        """if selected_process is None and sum(thread_count_list) < max_thread * self.max_cpu_count:
-            self._start_processes(1)"""
-
-        return selected_process
+        self._start_thread_counter()
 
     def _start_processes(self, count):
         for _ in range(count):
@@ -127,7 +61,25 @@ class QueueWatcher:
                 except Exception as e:
                     print(f"Error shutting down process: {e}")
 
-    def _create_thread(self, item: json):
+    def _get_next_process(self):
+        """Select the process with the lowest thread count"""
+        if not self.active_processes or None in self.thread_count_list:
+            return None
+
+        thread_count_list = self.thread_count_list
+
+        if sum(thread_count_list) >= self.thread_lock_limit:
+            selected_process = self.active_processes[self.current_process_index]
+            self.current_process_index = (self.current_process_index + 1) % self.max_cpu_count
+
+        else:
+            index = thread_count_list.index(min(thread_count_list))
+            selected_process = self.active_processes[index]
+            self.current_process_index = index
+
+        return selected_process
+
+    def create_thread(self, item: json):
         process = self._get_next_process()
         if process is None:
             """item["error_message"] = {"error": "No active processes available"}
@@ -150,7 +102,7 @@ class QueueWatcher:
                 self.thread_count_list = self._get_process_thread_counts()
                 avg_threads = sum(t for t in self.thread_count_list if t is not None) / max(1, len(self.thread_count_list))
                 print(self.thread_count_list)
-                if len(self.active_processes) < self.max_cpu_count and avg_threads > 2:
+                if len(self.active_processes) < self.max_cpu_count and avg_threads > 1.5:
                     print("[Parallelism Engine] Scaling up processes")
                     self._start_processes(1)
 
@@ -173,12 +125,37 @@ class QueueWatcher:
             except Exception as e:
                 print(f"Error shutting down process: {e}")
 
-    def _start_watch_threads(self, input_func: callable):
-        input_thread = Thread(target=input_func, daemon=True)
-        input_thread.start()
+    def _get_process_thread_counts(self):
+        thread_counts = []
+        with self.process_lock:
+            for proc_dict in self.active_processes:
+                try:
+                    proc_dict['health_pipe'].send({"command": "get_thread_count"})
+                    if proc_dict['health_pipe'].poll(0.05):  # 1 sn timeout
+                        resp = proc_dict['health_pipe'].recv()
+                        thread_counts.append(resp.get("thread_count", 0))
+                    else:
+                        thread_counts.append(None)
+                except Exception as e:
+                    print(f"Error getting thread count: {e}")
+                    thread_counts.append(None)
+        return thread_counts
 
-        self.scaler_thread = threading.Thread(target=self._auto_scale_processes, daemon=True)
-        self.scaler_thread.start()
+    def _thread_count_updater(self):
+        while not self.shutdown_event.is_set():
+            self.thread_count_list = self._get_process_thread_counts()
+            print(self.thread_count_list)
+            time.sleep(0.2)
+
+    def _start_thread_counter(self):
+        if self.auto_scale:
+            self.scaler_thread = Thread(target=self._auto_scale_processes, daemon=True)
+            self.scaler_thread.start()
+
+        else:
+            self.scaler_thread = Thread(target=self._thread_count_updater, daemon=True)
+            self.scaler_thread.start()
+
 
     def _set_process_priority(self, pid: int, priority):
         """Setting process priority (with error handling)"""

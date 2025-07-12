@@ -1,5 +1,5 @@
+from ..engine import ProcessController, QueueController
 from ..queue_module import BaseQueue
-from ..engine import QueueWatcher
 import json
 import atexit
 import signal
@@ -11,7 +11,8 @@ class Manager:
     def __init__(self):
         self.input_queue = BaseQueue()
         self.output_queue = BaseQueue()
-        self.watcher = None
+        self.process_controller = None
+        self.queue_controller = None
         self.started = False
 
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -20,8 +21,12 @@ class Manager:
 
     def start(self):
         if not self.started:
-            self.watcher = QueueWatcher(self.input_queue, self.output_queue, False if platform.system() == "Windows" else True)
-            self.watcher.start()
+            self.process_controller = ProcessController(self.output_queue, False if platform.system() == "Windows" else True)
+            self.process_controller.start()
+
+            self.queue_controller = QueueController(self.input_queue, self.process_controller)
+            self.queue_controller.start()
+
             self.started = True
 
     def put_item(self, item: json):
@@ -47,8 +52,9 @@ class Manager:
 
     def shutdown(self):
         """Graceful shutdown"""
-        if self.watcher and self.started:
-            self.watcher.shutdown()
+        if self.queue_controller and self.process_controller and self.started:
+            self.queue_controller.shutdown()
+            self.process_controller.shutdown()
             self.started = False
             return True
 

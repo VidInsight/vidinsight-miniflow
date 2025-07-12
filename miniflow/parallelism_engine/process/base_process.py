@@ -1,4 +1,4 @@
-from multiprocessing import Process, Pipe
+from multiprocessing import Process
 from .base_thread import BaseThread
 from ..queue_module import BaseQueue
 import threading
