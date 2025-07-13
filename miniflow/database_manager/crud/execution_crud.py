@@ -32,3 +32,9 @@ class ExecutionCRUD(BaseCRUD[Execution]):
     - bulk_update()
     - bulk_delete()
     """
+
+    def get_active_executions_by_workflow(self, session, workflow_id):
+        stmt = select(self.model).where(
+            (self.model.workflow_id == workflow_id) & (self.model.status == 'active')
+        )
+        return list(session.execute(stmt).scalars().all())

@@ -392,7 +392,7 @@ class DatabaseOrchestration:
         # 5. Sonuçları döndür
         return {
             "success": True,
-            "workflow_id": workflow.id,
+            "workflow_dict": workflow.to_dict(),
             "nodes_created": len(node_ids),
             "edges_created": len(edge_ids),
             "triggers_created": len(trigger_ids),
@@ -443,7 +443,7 @@ class DatabaseOrchestration:
                 "status": "deleted"
             },
             "new_workflow": {
-                "id": create_result["workflow_id"],
+                "id": create_result["workflow_dict"]["id"],
                 "name": create_result["workflow_name"],
                 "status": "created"
             },
@@ -455,7 +455,39 @@ class DatabaseOrchestration:
             "message": f"Workflow updated successfully - old workflow '{old_workflow_name}' deleted, new workflow '{create_result['workflow_name']}' created",
             "warning": "Workflow ID changed because workflow was completely recreated"
         }
-    
+
+    def get_workflows(self, session: Session):
+        """
+        Tüm workflow'ları listele
+        """
+        workflows = self.workflow_crud.get_all(session)
+        return [workflow.to_dict() for workflow in workflows]
+
+    def get_workflow(self, session: Session, workflow_id: str):
+        """
+        Workflow detayını getir (nodes, edges, triggers dahil)
+        """
+        # 1. Workflow'u bul
+        workflow = self.workflow_crud.find_by_id(session, workflow_id)
+        if not workflow:
+            raise ValueError(f"Workflow not found: {workflow_id}")
+        
+        workflow_dict = workflow.to_dict()
+        
+        # 2. Node'ları getir
+        nodes = self.node_crud.get_nodes_by_workflow(session, workflow_id)
+        workflow_dict['nodes'] = [node.to_dict() for node in nodes]
+        
+        # 3. Edge'leri getir
+        edges = self.edge_crud.get_edges_by_workflow(session, workflow_id)
+        workflow_dict['edges'] = [edge.to_dict() for edge in edges]
+        
+        # 4. Trigger'ları getir
+        triggers = self.trigger_crud.get_triggers_by_workflow(session, workflow_id)
+        workflow_dict['triggers'] = [trigger.to_dict() for trigger in triggers]
+        
+        return workflow_dict
+
 
     # SCRIPT FUNCTIONS
     # ==============================================================
@@ -537,13 +569,8 @@ class DatabaseOrchestration:
         Yeni script oluştur
         """
         script = self.__script_create(session, **script_data)
-        
-        return {
-            "success": True,
-            "script_id": script.id,
-            "script_name": script.name,
-            "message": "Script created successfully"
-        }
+        script_dict = script.to_dict()  # Convert to dict while session is open
+        return script_dict
 
     def update_script(self, session: Session, script_id: str, script_data: dict):
         """
@@ -608,3 +635,31 @@ class DatabaseOrchestration:
                 "workflows": list(workflow_usage.values())
             }
         }
+
+    def get_scripts(self, session: Session):
+        """
+        Tüm script'leri listele
+        """
+        scripts = self.script_crud.get_all(session)
+        return [script.to_dict() for script in scripts]
+
+    def get_script(self, session: Session, script_id: str, include_content: bool = False):
+        """
+        Script detayını getir
+        """
+        # 1. Script'i bul
+        script = self.script_crud.find_by_id(session, script_id)
+        if not script:
+            raise ValueError(f"Script not found: {script_id}")
+        
+        script_dict = script.to_dict()
+        
+        # 2. Eğer content isteniyorsa, dosyadan oku
+        if include_content and script.script_path:
+            try:
+                with open(script.script_path, 'r') as f:
+                    script_dict['file_content'] = f.read()
+            except Exception as e:
+                script_dict['file_content'] = f"Error reading file: {str(e)}"
+        
+        return script_dict

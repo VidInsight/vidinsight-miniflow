@@ -32,3 +32,7 @@ class TriggerCRUD(BaseCRUD[Trigger]):
     - bulk_update()
     - bulk_delete()
     """
+
+    def get_triggers_by_workflow(self, session, workflow_id):
+        stmt = select(self.model).where(self.model.workflow_id == workflow_id)
+        return list(session.execute(stmt).scalars().all())

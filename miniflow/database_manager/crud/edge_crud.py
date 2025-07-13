@@ -30,3 +30,12 @@ class EdgeCRUD(BaseCRUD[Edge]):
     - bulk_update()
     - bulk_delete()
     """
+
+    def get_edges_by_workflow(self, session, workflow_id):
+        from ..models import Node
+        from sqlalchemy import select
+        node_ids = [node.id for node in session.query(Node).filter_by(workflow_id=workflow_id).all()]
+        stmt = select(self.model).where(
+            (self.model.from_node_id.in_(node_ids)) | (self.model.to_node_id.in_(node_ids))
+        )
+        return list(session.execute(stmt).scalars().all())

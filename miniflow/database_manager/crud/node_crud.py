@@ -41,3 +41,9 @@ class NodeCRUD(BaseCRUD[Node]):
         stmt = select(self.model).where(self.model.script_id == script_id)
         return list(session.execute(stmt).scalars().all())
 
+    def get_by_name(self, session: Session, name: str, workflow_id: str):
+        stmt = select(self.model).where(
+            and_(self.model.name == name, self.model.workflow_id == workflow_id)
+        )
+        return session.execute(stmt).scalars().first()
+
