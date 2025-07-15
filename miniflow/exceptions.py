@@ -1,5 +1,4 @@
-from typing import Optional, Dict, Any, Callable
-from contextlib import contextmanager
+from typing import Dict, Any, Callable
 from datetime import datetime
 from functools import wraps
 import logging
@@ -18,7 +17,7 @@ class MiniflowException(Exception):
 class DatabaseError(MiniflowException):
     """Veritabanı hataları için"""
     def __init__(self, message: str, details: str = None, error_code: str = None):
-        super().__init__(message, error_code or "DATABASE_ERROR", details),
+        super().__init__(message, error_code or "DATABASE_ERROR", details)
 
 class EngineError(MiniflowException):
     """Execution Engine hataları için"""
@@ -52,7 +51,7 @@ def create_error_response(exception: MiniflowException) -> Dict[str, Any]:
     if exception.details:
         logger.error(f"Details: {exception.details}")
 
-    # 2. Hata çıktısını döndür
+    # 2. Hata çıktısını döndür
     return {
         "status": "error",
         "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -102,14 +101,84 @@ class ErrorManager:
                     raise ResourceError(error_msg, str(e))
                 
                 except Exception as e:
-                    # Unexpected errors
-                    error_msg = f"Unexpected error in {operation_name}"
-                    logger.error(f"{error_msg}: {str(e)}", exc_info=True)
-                    raise DatabaseError(error_msg, str(e))
+                    # Smart exception mapping based on operation context and exception type
+                    mapped_exception = ErrorManager._map_exception_to_context(e, operation_name)
+                    logger.error(f"Unexpected error in {operation_name}: {str(e)}", exc_info=True)
+                    raise mapped_exception
                 
             return wrapper
         return decorator
     
+    @staticmethod
+    def _map_exception_to_context(exception: Exception, operation_name: str) -> MiniflowException:
+        """
+        Map unexpected exceptions to appropriate MiniflowException types
+        based on exception type and operation context
+        """
+        error_msg = f"Unexpected error in {operation_name}"
+        exception_str = str(exception)
+        
+        # Exception type-based mapping
+        exception_type_map = {
+            # Database related
+            'psycopg2.Error': DatabaseError,
+            'sqlite3.Error': DatabaseError,
+            'pymysql.Error': DatabaseError,
+            'sqlalchemy.exc.SQLAlchemyError': DatabaseError,
+            
+            # File/IO related  
+            'FileNotFoundError': ResourceError,
+            'PermissionError': ResourceError,
+            'IsADirectoryError': ResourceError,
+            'NotADirectoryError': ResourceError,
+            
+            # Network related
+            'requests.exceptions.RequestException': ResourceError,
+            'urllib.error.URLError': ResourceError,
+            'ConnectionError': ResourceError,
+            'TimeoutError': ResourceError,
+            
+            # Validation related
+            'ValueError': ValidationError,
+            'TypeError': ValidationError,
+            'KeyError': ValidationError,
+            'AttributeError': ValidationError,
+            
+            # Import/Module related
+            'ImportError': ResourceError,
+            'ModuleNotFoundError': ResourceError,
+        }
+        
+        # Check exception type hierarchy
+        exception_class_name = exception.__class__.__name__
+        exception_module = getattr(exception.__class__, '__module__', '')
+        full_exception_name = f"{exception_module}.{exception_class_name}" if exception_module else exception_class_name
+        
+        # Try exact match first
+        for pattern, exception_type in exception_type_map.items():
+            if pattern in full_exception_name or pattern in exception_class_name:
+                return exception_type(error_msg, exception_str)
+        
+        # Operation context-based mapping
+        operation_context_map = {
+            'database': DatabaseError,
+            'db_': DatabaseError,
+            'script': ResourceError,
+            'workflow': BusinessLogicError,
+            'validation': ValidationError,
+            'engine': EngineError,
+            'scheduler': SchedulerError,
+            'api': BusinessLogicError,
+        }
+        
+        # Check if operation name contains context keywords
+        operation_lower = operation_name.lower()
+        for context_key, exception_type in operation_context_map.items():
+            if context_key in operation_lower:
+                return exception_type(error_msg, exception_str)
+        
+        # Default: Use generic MiniflowException for truly unknown errors
+        return MiniflowException(error_msg, "UNKNOWN_ERROR", exception_str)
 
     @staticmethod
     def validate_engine_state(engine) -> None:
