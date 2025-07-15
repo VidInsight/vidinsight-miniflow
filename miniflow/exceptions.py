@@ -1,5 +1,7 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
+from contextlib import contextmanager
 from datetime import datetime
+from functools import wraps
 import logging
 
 logger = logging.getLogger(__name__)
@@ -72,3 +74,58 @@ def handle_unexpected_error(error: Exception, context: str = "") -> Dict[str, An
         "message": error_msg,
         "details": "Sistem yöneticisiyle iletişime geçin"
     } 
+
+
+class ErrorManager:
+    """Merkezi hata yönetim modülü"""
+
+    @staticmethod
+    def operation_context(operation_name: str):
+        def decorator(func: Callable) -> Callable:
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                try:
+                    logger.debug(f"Starting operation: {operation_name}")
+                    result = func(*args, **kwargs)
+                    logger.debug(f"Completed operation: {operation_name}")
+                    return result
+                
+                except MiniflowException:
+                    # Re-raise custom exceptions as-is
+                    logger.warning(f"Business error in {operation_name}")
+                    raise
+
+                except OSError as e:
+                    # File system errors
+                    error_msg = f"File system error in {operation_name}"
+                    logger.error(f"{error_msg}: {str(e)}")
+                    raise ResourceError(error_msg, str(e))
+                
+                except Exception as e:
+                    # Unexpected errors
+                    error_msg = f"Unexpected error in {operation_name}"
+                    logger.error(f"{error_msg}: {str(e)}", exc_info=True)
+                    raise DatabaseError(error_msg, str(e))
+                
+            return wrapper
+        return decorator
+    
+
+    @staticmethod
+    def validate_engine_state(engine) -> None:
+        """Validate that database engine is properly initialized"""
+        if not engine:
+            raise BusinessLogicError(
+                "Database engine not initialized",
+                "Call start() method before performing operations"
+            )
+    
+    @staticmethod
+    def validate_required_fields(data: dict, required_fields: list, operation: str) -> None:
+        """Validate required fields in input data"""
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        if missing_fields:
+            raise ValidationError(
+                f"Missing required fields for {operation}: {', '.join(missing_fields)}",
+                f"Required fields: {required_fields}"
+            )
