@@ -12,6 +12,7 @@ from .models import (
     ExecutionInput, ExecutionOutput, ArchivedExecution, AuditLog,
     WorkflowStatus, ExecutionStatus, TriggerType, ConditionType, AuditAction
 )
+from ..exceptions import ValidationError, BusinessLogicError
 
 class DatabaseOrchestration:
     def __init__(self):
@@ -32,7 +33,7 @@ class DatabaseOrchestration:
     def __workflow_create(self, session: Session, **workflow_data):
         # 1. Aynı isimli bir workflow var mı kontrol et
         if self.workflow_crud.check_name_exists(session, workflow_data['name']):
-            raise ValueError(f"Workflow with name '{workflow_data.get('name')}' already exists")
+            raise ValidationError(f"Workflow with name '{workflow_data.get('name')}' already exists")
 
         # 2. Workflow oluştur
         workflow = self.workflow_crud.create(session, **workflow_data)
@@ -56,7 +57,7 @@ class DatabaseOrchestration:
         # 2. Active Executionları kontorl et
         active_executions = self.execution_crud.get_active_executions_by_workflow(session, workflow_id)
         if active_executions:
-            raise ValueError(f"Cannot delete workflow with active executions. Found {len(active_executions)} active executions.")
+            raise BusinessLogicError(f"Cannot delete workflow with active executions. Found {len(active_executions)} active executions.")
         
         # 3. İlişkili bileşenleri sil (CASCADE yoksa manuel)
         # 3a. Trigger'ları sil
@@ -96,7 +97,7 @@ class DatabaseOrchestration:
         # 2. İsim değişikliği varsa kontrol et
         if workflow_data['name'] != old_workflow.name:
             if self.workflow_crud.check_name_exists(session, workflow_data['name']):
-                raise ValueError(f"Workflow with name '{workflow_data['name']}' already exists")
+                raise ValidationError(f"Workflow with name '{workflow_data['name']}' already exists")
         
         # 3. Workflow'u güncelle
         updated_workflow = self.workflow_crud.update(session, workflow_id, **workflow_data)
@@ -114,7 +115,6 @@ class DatabaseOrchestration:
         # 5. Updated workflow'u döndür
         return updated_workflow
 
-
     # NODE FUNCTIONS
     # ==============================================================
     def __node_create(self, session: Session, **node_data):
@@ -124,11 +124,11 @@ class DatabaseOrchestration:
         # 2. Script'in varlığını kontrol et ve ID'yi bul
         script_name = node_data.get("script_name")
         if not script_name:
-            raise ValueError("Script name is required for node creation")
+            raise ValidationError("Script name is required for node creation")
         
         script = self.script_crud.find_by_name(session, script_name)
         if not script:
-            raise ValueError(f"Script with name '{script_name}' not found")
+            raise BusinessLogicError(f"Script with name '{script_name}' not found")
         
         node_data.pop("script_name")
         node_data["script_id"] = script.id
@@ -136,7 +136,7 @@ class DatabaseOrchestration:
         # 3. Workflow içinde aynı isimli bir node var mı kontrol et
         existing_node = self.node_crud.get_by_name(session, node_data.get('name'), workflow.id)
         if existing_node:
-            raise ValueError(f"Node with name '{node_data.get('name')}' already exists in workflow")
+            raise ValidationError(f"Node with name '{node_data.get('name')}' already exists in workflow")
         
         # 4. Node oluştur
         node = self.node_crud.create(session, **node_data)
@@ -180,7 +180,7 @@ class DatabaseOrchestration:
         if 'name' in node_data and node_data['name'] != old_node.name:
             existing_node = self.node_crud.get_by_name(session, node_data['name'], old_node.workflow_id)
             if existing_node and existing_node.id != node_id:
-                raise ValueError(f"Node with name '{node_data['name']}' already exists in workflow")
+                raise ValidationError(f"Node with name '{node_data['name']}' already exists in workflow")
         
         # 3. Node'u güncelle
         updated_node = self.node_crud.update(session, node_id, **node_data)
@@ -198,7 +198,6 @@ class DatabaseOrchestration:
         # 5. Updated node'u döndür
         return updated_node
 
-
     # EDGE FUNCTIONS
     # ==============================================================
     def __edge_create(self, session: Session, **edge_data):
@@ -208,7 +207,7 @@ class DatabaseOrchestration:
         
         # 2. Aynı workflow'da mı kontrol et
         if from_node.workflow_id != to_node.workflow_id:
-            raise ValueError("Nodes must be in the same workflow")
+            raise ValidationError("Nodes must be in the same workflow")
         
         # 3. Workflow ID'yi ayarla
         edge_data['workflow_id'] = from_node.workflow_id
@@ -260,7 +259,7 @@ class DatabaseOrchestration:
             to_node = self.node_crud.find_by_id(session, to_node_id)
             
             if from_node.workflow_id != to_node.workflow_id:
-                raise ValueError("Nodes must be in the same workflow")
+                raise ValidationError("Nodes must be in the same workflow")
         
         # 3. Edge'i güncelle
         updated_edge = self.edge_crud.update(session, edge_id, **edge_data)
@@ -277,7 +276,6 @@ class DatabaseOrchestration:
 
         # 5. Updated edge'i döndür
         return updated_edge
-
 
     # TRIGGER FUNCTIONS
     # ==============================================================
@@ -339,7 +337,79 @@ class DatabaseOrchestration:
         # 4. Updated trigger'ı döndür
         return updated_trigger
 
+    # SCRIPT FUNCTIONS
+    # ==============================================================
+    def __script_create(self, session: Session, **script_data):
+        # 1. Aynı isimli bir script var mı kontrol et
+        if self.script_crud.check_name_exists(session, script_data['name']):
+            raise ValidationError(f"Script with name '{script_data.get('name')}' already exists")
 
+        # 2. Script oluştur
+        script = self.script_crud.create(session, **script_data)
+
+        # 3. Audit Log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="script",
+            record_id=script.id,
+            action=AuditAction.CREATE,
+            new_values=script.to_dict()
+        )
+
+        # 4. Oluşan script'i döndür
+        return script
+
+    def __script_update(self, session: Session, script_id, **script_data):
+        # 1. Eski değerleri al
+        old_script = self.script_crud.find_by_id(session, script_id)
+
+        # 2. İsim değişikliği varsa kontrol et
+        if 'name' in script_data and script_data['name'] != old_script.name:
+            if self.script_crud.check_name_exists(session, script_data['name']):
+                raise ValidationError(f"Script with name '{script_data['name']}' already exists")
+        
+        # 3. Script'i güncelle
+        updated_script = self.script_crud.update(session, script_id, **script_data)
+
+        # 4. Audit Log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name='script',
+            record_id=updated_script.id,
+            action=AuditAction.UPDATE,
+            old_values=old_script.to_dict(),
+            new_values=updated_script.to_dict()
+        )
+
+        # 5. Updated script'i döndür
+        return updated_script
+
+    def __script_delete(self, session: Session, script_id):
+        # 1. Script'i bul
+        old_script = self.script_crud.find_by_id(session, script_id)
+
+        # 2. Script'in kullanıldığı node'ları kontrol et
+        nodes_using_script = self.node_crud.get_nodes_by_script(session, script_id)
+        if nodes_using_script:
+            node_names = [node.name for node in nodes_using_script]
+            raise BusinessLogicError(f"Cannot delete script '{old_script.name}' - it is used by nodes: {', '.join(node_names)}")
+        
+        # 3. Script'i sil
+        result = self.script_crud.delete(session, script_id)
+
+        # 4. Audit log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="script",
+            record_id=old_script.id,
+            action=AuditAction.DELETE,
+            old_values=old_script.to_dict()
+        )
+
+        # 5. Silinen script'i döndür
+        return old_script
+
+    # ==============================================================
     # END-TO-END WORKFLOW FUNCTIONS
     # ==============================================================
     def create_workflow(self, session: Session, workflow_data: dict):
@@ -391,12 +461,11 @@ class DatabaseOrchestration:
 
         # 5. Sonuçları döndür
         return {
-            "success": True,
-            "workflow_dict": workflow.to_dict(),
-            "nodes_created": len(node_ids),
-            "edges_created": len(edge_ids),
-            "triggers_created": len(trigger_ids),
-            "workflow_name": workflow.name
+            'workflow_id': workflow.id,
+            'created_at': workflow.created_at.isoformat() if workflow.created_at else None,
+            'nodes': node_ids,
+            'edges': edge_ids,
+            'triggers': trigger_ids,
         }
 
     def delete_workflow(self, session: Session, workflow_id: str):
@@ -407,10 +476,8 @@ class DatabaseOrchestration:
         deleted_workflow = self.__workflow_delete(session, workflow_id)
         
         return {
-            "success": True,
             "workflow_id": deleted_workflow.id,
             "workflow_name": deleted_workflow.name,
-            "message": "Workflow and all components deleted successfully"
         }
 
     def update_workflow(self, session: Session, workflow_id: str, workflow_data: dict):
@@ -426,42 +493,32 @@ class DatabaseOrchestration:
         # AŞAMA 1: Eski workflow bilgilerini kaydet
         old_workflow = self.workflow_crud.find_by_id(session, workflow_id)
         old_workflow_name = old_workflow.name
+        old_workflow_id = old_workflow.id
         
         # AŞAMA 2: Eski workflow'u tamamen sil
         delete_result = self.delete_workflow(session, workflow_id)
         
         # AŞAMA 3: Yeni workflow'u oluştur
-        create_result = self.create_workflow(session, workflow_data)
+        created_result = self.create_workflow(session, workflow_data)
         
-        # AŞAMA 4: Sonuçları döndür
+        # AŞAMA 4: Sonuçları döndür (WorkflowUpdateResponse formatında)
+        from datetime import datetime
         return {
-            "success": True,
-            "operation": "update_via_delete_create",
-            "old_workflow": {
-                "id": workflow_id,
-                "name": old_workflow_name,
-                "status": "deleted"
-            },
-            "new_workflow": {
-                "id": create_result["workflow_dict"]["id"],
-                "name": create_result["workflow_name"],
-                "status": "created"
-            },
-            "components_created": {
-                "nodes": create_result["nodes_created"],
-                "edges": create_result["edges_created"],
-                "triggers": create_result["triggers_created"]
-            },
-            "message": f"Workflow updated successfully - old workflow '{old_workflow_name}' deleted, new workflow '{create_result['workflow_name']}' created",
-            "warning": "Workflow ID changed because workflow was completely recreated"
+            'workflow_id': created_result['workflow_id'],
+            'created_at': created_result['created_at'],  # Zaten isoformat edilmiş
+            'nodes': created_result['nodes'],
+            'edges': created_result['edges'],
+            'triggers': created_result['triggers'],
         }
 
-    def get_workflows(self, session: Session):
+    def get_workflows(self, session: Session, page: Optional[int] = None, page_size: Optional[int] = None):
         """
         Tüm workflow'ları listele
         """
         workflows = self.workflow_crud.get_all(session)
-        return [workflow.to_dict() for workflow in workflows]
+        workflow_list = [workflow.to_dict() for workflow in workflows]
+            
+        return workflow_list
 
     def get_workflow(self, session: Session, workflow_id: str):
         """
@@ -470,7 +527,7 @@ class DatabaseOrchestration:
         # 1. Workflow'u bul
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
-            raise ValueError(f"Workflow not found: {workflow_id}")
+            raise BusinessLogicError(f"Workflow not found: {workflow_id}")
         
         workflow_dict = workflow.to_dict()
         
@@ -488,80 +545,6 @@ class DatabaseOrchestration:
         
         return workflow_dict
 
-
-    # SCRIPT FUNCTIONS
-    # ==============================================================
-    def __script_create(self, session: Session, **script_data):
-        # 1. Aynı isimli bir script var mı kontrol et
-        if self.script_crud.check_name_exists(session, script_data['name']):
-            raise ValueError(f"Script with name '{script_data.get('name')}' already exists")
-
-        # 2. Script oluştur
-        script = self.script_crud.create(session, **script_data)
-
-        # 3. Audit Log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="script",
-            record_id=script.id,
-            action=AuditAction.CREATE,
-            new_values=script.to_dict()
-        )
-
-        # 4. Oluşan script'i döndür
-        return script
-
-    def __script_update(self, session: Session, script_id, **script_data):
-        # 1. Eski değerleri al
-        old_script = self.script_crud.find_by_id(session, script_id)
-
-        # 2. İsim değişikliği varsa kontrol et
-        if 'name' in script_data and script_data['name'] != old_script.name:
-            if self.script_crud.check_name_exists(session, script_data['name']):
-                raise ValueError(f"Script with name '{script_data['name']}' already exists")
-        
-        # 3. Script'i güncelle
-        updated_script = self.script_crud.update(session, script_id, **script_data)
-
-        # 4. Audit Log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name='script',
-            record_id=updated_script.id,
-            action=AuditAction.UPDATE,
-            old_values=old_script.to_dict(),
-            new_values=updated_script.to_dict()
-        )
-
-        # 5. Updated script'i döndür
-        return updated_script
-
-    def __script_delete(self, session: Session, script_id):
-        # 1. Script'i bul
-        old_script = self.script_crud.find_by_id(session, script_id)
-
-        # 2. Script'in kullanıldığı node'ları kontrol et
-        nodes_using_script = self.node_crud.get_nodes_by_script(session, script_id)
-        if nodes_using_script:
-            node_names = [node.name for node in nodes_using_script]
-            raise ValueError(f"Cannot delete script '{old_script.name}' - it is used by nodes: {', '.join(node_names)}")
-        
-        # 3. Script'i sil
-        result = self.script_crud.delete(session, script_id)
-
-        # 4. Audit log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="script",
-            record_id=old_script.id,
-            action=AuditAction.DELETE,
-            old_values=old_script.to_dict()
-        )
-
-        # 5. Silinen script'i döndür
-        return old_script
-
-
     # END-TO-END SCRIPT FUNCTIONS
     # ==============================================================
     def create_script(self, session: Session, script_data: dict):
@@ -569,21 +552,14 @@ class DatabaseOrchestration:
         Yeni script oluştur
         """
         script = self.__script_create(session, **script_data)
-        script_dict = script.to_dict()  # Convert to dict while session is open
-        return script_dict
-
-    def update_script(self, session: Session, script_id: str, script_data: dict):
-        """
-        Script'i güncelle
-        """
-        script = self.__script_update(session, script_id, **script_data)
         
-        return {
-            "success": True,
-            "script_id": script.id,
-            "script_name": script.name,
-            "message": "Script updated successfully"
+        api_payload = {
+            'script_id': script.id,
+            'absolute_path': script.script_path,
+            'created_at': script.created_at.isoformat() if script.created_at else None
         }
+
+        return api_payload
 
     def delete_script(self, session: Session, script_id: str):
         """
@@ -591,57 +567,21 @@ class DatabaseOrchestration:
         """
         deleted_script = self.__script_delete(session, script_id)
         
-        return {
-            "success": True,
-            "script_id": deleted_script.id,
-            "script_name": deleted_script.name,
-            "message": "Script deleted successfully"
+        api_payload = {
+            'script_id': deleted_script.id,
+            'script_name': deleted_script.name,
         }
 
-    def get_script_usage(self, session: Session, script_id: str):
-        """
-        Script'in hangi workflow/node'larda kullanıldığını getir
-        """
-        # 1. Script'i bul
-        script = self.script_crud.find_by_id(session, script_id)
-        
-        # 2. Bu script'i kullanan node'ları bul
-        nodes_using_script = self.node_crud.get_nodes_by_script(session, script_id)
-        
-        # 3. Node'ların workflow bilgilerini topla
-        workflow_usage = {}
-        for node in nodes_using_script:
-            workflow_id = node.workflow_id
-            if workflow_id not in workflow_usage:
-                workflow = self.workflow_crud.find_by_id(session, workflow_id)
-                workflow_usage[workflow_id] = {
-                    "workflow_id": workflow_id,
-                    "workflow_name": workflow.name,
-                    "nodes": []
-                }
-            
-            workflow_usage[workflow_id]["nodes"].append({
-                "node_id": node.id,
-                "node_name": node.name
-            })
-        
-        return {
-            "success": True,
-            "script_id": script.id,
-            "script_name": script.name,
-            "usage": {
-                "total_nodes": len(nodes_using_script),
-                "total_workflows": len(workflow_usage),
-                "workflows": list(workflow_usage.values())
-            }
-        }
+        return api_payload
 
     def get_scripts(self, session: Session):
         """
         Tüm script'leri listele
         """
         scripts = self.script_crud.get_all(session)
-        return [script.to_dict() for script in scripts]
+        script_list = [script.to_dict() for script in scripts]
+
+        return script_list
 
     def get_script(self, session: Session, script_id: str, include_content: bool = False):
         """
@@ -650,7 +590,7 @@ class DatabaseOrchestration:
         # 1. Script'i bul
         script = self.script_crud.find_by_id(session, script_id)
         if not script:
-            raise ValueError(f"Script not found: {script_id}")
+            raise BusinessLogicError(f"Script not found: {script_id}")
         
         script_dict = script.to_dict()
         

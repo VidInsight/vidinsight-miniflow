@@ -188,7 +188,7 @@ class Script(BaseModel):
 
     name = Column(String(255), nullable=False, unique=True)
     description = Column(Text, nullable=True)
-    language = Column(Enum(ScriptType), nullable=False)
+    language = Column(Enum(ScriptType), nullable=False, default=ScriptType.PYTHON) 
     script_path = Column(Text, nullable=False)
     input_params = Column(JSON, default=lambda: {}, nullable=False)
     output_params = Column(JSON, default=lambda: {}, nullable=False)
