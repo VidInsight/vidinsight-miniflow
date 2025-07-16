@@ -5,8 +5,8 @@ import os
 
 from ..models import (
     ScriptCreateRequest, ScriptCreateResponse, 
-    ScriptDeleteRequest, ScriptDeleteReponse, 
-    ScriptListResponse, ScriptGetResponse,
+    ScriptDeleteResponse, ScriptGetResponse,
+    ScriptListResponse,
     )
 
 logger = logging.getLogger(__name__)
@@ -22,135 +22,75 @@ def get_miniflow_core():
 
 @router.post("/create", response_model=ScriptCreateResponse, status_code=status.HTTP_201_CREATED)
 async def script_create(request: ScriptCreateRequest, core = Depends(get_miniflow_core)):
-    try:
-        # Request verilerini hazırla
-        script_data = {
-            'name': request.name,
-            'description': request.description,
-            'input_structure': request.input_structure,
-            'output_structure': request.output_structure
-        }
-        
-        # MiniflowCore'dan script oluştur (güncellenmiş method)
-        result = core.script_create(
-            script_data=script_data, 
-            script_content=request.file_content
-        )
-        
-        response_data = {
-            'script_id': result['id'],
-            'name': result['name'],
-            'description': result['description'] or '',
-            'absolute_path': result['script_path'],
-            'language': result['language'],
-            'input_structure': result['input_params'],
-            'output_structure': result['output_params'],
-            'test_status': result['test_status'],
-            'created_at': result['created_at']
-        }
-        
-        # Response model'e uygun formatta döndür
-        return ScriptCreateResponse(**response_data)
-        
-    except ValueError as e:
-        logger.error(f"Script creation validation error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Script creation unexpected error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while creating script"
-        )
+    """Create a new script"""
+    # Gelen veriden script
+    script_data = {
+        'name': request.name,
+        'description': request.description,
+        'input_params': request.input_params,
+        'output_params': request.output_params
+    }
+    
+    # MiniflowCore'dan script oluştur (Exception handling centralized)
+    result = core.script_create(
+        script_data=script_data, 
+        script_content=request.file_content
+    )
+    
+    # Response model'e uygun formatta döndür
+    return ScriptCreateResponse(
+        script_id=result['script_id'],
+        absolute_path=result['absolute_path'],
+        created_at=result['created_at']
+    )
 
-
-@router.post("/delete", response_model=ScriptDeleteReponse, status_code=status.HTTP_202_ACCEPTED)
-async def script_delete(request: ScriptDeleteRequest, core = Depends(get_miniflow_core)):
-    try:
-        result = core.script_delete(request.script_id)
-        
-        response_data = {
-            'success': result['success'],
-            'script_id': result['script_id'],
-            'script_name': result['script_name'],
-            'message': result['message']
-        }
-        
-        return ScriptDeleteReponse(**response_data)
-        
-    except ValueError as e:
-        logger.error(f"Script deletion validation error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Script deletion unexpected error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while deleting script"
-        )
-
-
-@router.get("/list", response_model=List[ScriptListResponse])
+@router.get("/list", response_model=ScriptListResponse)
 async def script_list(core = Depends(get_miniflow_core)):
-    try:
-        scripts = core.script_list()
-        
-        response_data = []
-        for script in scripts:
-            response_data.append({
-                'script_id': script['id'],
-                'name': script['name'],
-                'description': script['description'],
-                'language': script['language'],
-                'test_status': script['test_status'],
-                'created_at': script['created_at'],
-                'updated_at': script['updated_at']
-            })
-        
-        return [ScriptListResponse(**script_data) for script_data in response_data]
-        
-    except Exception as e:
-        logger.error(f"Script listing unexpected error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while listing scripts"
-        )
-
+    """List all scripts"""
+    scripts = core.script_list()
+    
+    script_responses = []
+    for script in scripts:
+        script_responses.append(ScriptGetResponse(
+            script_id=script['id'],
+            name=script['name'],
+            description=script['description'],
+            absolute_path=script['script_path'],
+            language=script['language'],
+            input_params=script['input_params'],
+            output_params=script['output_params'],
+            test_status=script['test_status'],
+            created_at=script['created_at'],
+            updated_at=script['updated_at']
+        ))
+    
+    return ScriptListResponse(scripts=script_responses)
 
 @router.get("/{script_id}", response_model=ScriptGetResponse)
-async def script_get(script_id: str, include_content: bool = Query(False, description="Include script file content in response"),core = Depends(get_miniflow_core)):
-    try:
-        result = core.script_get(script_id, include_content)
-        
-        response_data = {
-            'script_id': result['id'],
-            'name': result['name'],
-            'description': result['description'],
-            'absolute_path': result['script_path'],
-            'language': result['language'],
-            'input_structure': result['input_params'],
-            'output_structure': result['output_params'],
-            'test_status': result['test_status'],
-            'created_at': result['created_at'],
-            'updated_at': result['updated_at'],
-            'file_content': result.get('file_content')
-        }
-        
-        return ScriptGetResponse(**response_data)
-        
-    except ValueError as e:
-        logger.error(f"Script get validation error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Script get unexpected error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving script"
-        )
+async def script_get(script_id: str, include_content: bool = Query(False, description="Include script file content in response"), core = Depends(get_miniflow_core)):
+    """Get script details"""
+    result = core.script_get(script_id, include_content)
+    
+    return ScriptGetResponse(
+        script_id=result['id'],  # Fixed: was missing script_id field
+        name=result['name'],
+        description=result['description'],
+        absolute_path=result['script_path'],
+        language=result['language'],
+        input_params=result['input_params'],
+        output_params=result['output_params'],
+        test_status=result['test_status'],
+        created_at=result['created_at'],
+        updated_at=result['updated_at'],
+        file_content=result.get('file_content')
+    )
+
+@router.post("/delete/{script_id}", response_model=ScriptDeleteResponse, status_code=status.HTTP_202_ACCEPTED)
+async def script_delete(script_id: str, core = Depends(get_miniflow_core)):
+    """Delete an existing script"""
+    result = core.script_delete(script_id)
+    
+    return ScriptDeleteResponse(
+        script_id=result['script_id'],
+        script_name=result['script_name']
+    )
