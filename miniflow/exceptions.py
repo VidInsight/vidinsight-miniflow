@@ -51,9 +51,9 @@ def create_error_response(exception: MiniflowException) -> Dict[str, Any]:
     if exception.details:
         logger.error(f"Details: {exception.details}")
 
-    # 2. Hata çıktısını döndür
+    # 2. Hata çıktısını döndür (ErrorResponse model formatında)
     return {
-        "status": "error",
+        "status": False,  # boolean for ErrorResponse compatibility
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "error_code": exception.error_code,
         "message": exception.message,
@@ -65,18 +65,46 @@ def handle_unexpected_error(error: Exception, context: str = "") -> Dict[str, An
     error_msg = f"Beklenmeyen hata oluştu{': ' + context if context else ''}"
     logger.error(f"Unexpected error in {context}: {str(error)}", exc_info=True)
     
-    # Basit error response
+    # Basit error response (ErrorResponse model formatında)
     return {
-        "status": "error",
+        "status": False,  # boolean for ErrorResponse compatibility
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "error_code": "INTERNAL_ERROR",
         "message": error_msg,
         "details": "Sistem yöneticisiyle iletişime geçin"
-    } 
+    }
 
 
 class ErrorManager:
     """Merkezi hata yönetim modülü"""
+
+    # HTTP STATUS CODE MAPPING
+    # ==============================================================
+    @staticmethod
+    def get_http_status_code(exception: MiniflowException) -> int:
+        """MiniflowException'ları HTTP status code'lara map et"""
+        status_map = {
+            ValidationError: 400,        # Bad Request
+            BusinessLogicError: 409,     # Conflict  
+            ResourceError: 404,          # Not Found
+            DatabaseError: 503,          # Service Unavailable
+            EngineError: 503,            # Service Unavailable
+            SchedulerError: 503,         # Service Unavailable
+            MiniflowException: 503       # Service Unavailable
+        }
+        
+        # Exception type'ına göre status code döndür
+        for exception_type, status_code in status_map.items():
+            if isinstance(exception, exception_type):
+                return status_code
+        
+        # Default fallback
+        return 500
+
+    @staticmethod
+    def exception_to_error_response(exception: MiniflowException) -> Dict[str, Any]:
+        """MiniflowException'ı ErrorResponse formatına çevir"""
+        return create_error_response(exception)
 
     @staticmethod
     def operation_context(operation_name: str):
