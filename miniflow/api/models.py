@@ -100,3 +100,32 @@ class WorkflowGetResponse(BaseResponse):
 # 7. Workflow Listeleme - Giden/Response
 class WorkflowListResponse(BaseResponse):
     workflows: List[WorkflowGetResponse] = Field(..., description="Workflow listesi")
+
+# EXECUTION MODELLERI
+# ==============================================================
+# 1. Execution Okuma - Giden/Response
+class ExecutionCreateResponse(BaseResponse):
+    execution_id: str = Field(...)
+    pending_nodes: int = Field(...)
+    pending_nodes_ids: List[str] = Field(...)
+    started_at: str = Field(...)
+
+class ExecutionCancelResponse(BaseResponse):
+    execution_id: str = Field(...)
+    pending_nodes: int = Field(...)
+    executed_nodes: int = Field(...)
+    results: dict = Field(...)
+    started_at: str = Field(...)
+
+class ExecutionGetResponse(BaseResponse):
+    workflow_id: str = Field(...)
+    execution_id: str = Field(...)
+    status: str = Field(...)
+    pending_nodes: int = Field(...)
+    executed_nodes: int = Field(...) 
+    results: dict = Field(...) 
+    started_at: str = Field(...) 
+    ended_at: Optional[str] = Field(...) 
+
+class ExecutionListResponse(BaseResponse):
+    executions: List[ExecutionGetResponse] = Field(...)

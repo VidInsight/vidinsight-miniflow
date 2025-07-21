@@ -108,6 +108,8 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Import and register routes
 from .routes.script_routes import router as script_router
 from .routes.workflow_routes import router as workflow_router
+from .routes.execution_routes import router as execution_router
 
 app.include_router(script_router, prefix="/miniflow")
 app.include_router(workflow_router, prefix="/miniflow")
+app.include_router(execution_router, prefix="/miniflow")
