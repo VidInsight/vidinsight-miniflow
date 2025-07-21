@@ -249,7 +249,58 @@ class MiniflowCore:
         with self.db_engine.get_session_context() as session:
             return self.orchestration.get_workflow(session, workflow_id)
     
+    # EXECUTION METOTLARI 
+    # ===========================================================
+    @ErrorManager.operation_context("trigger_workflow")
+    def trigger_workflow(self, workflow_id: str) -> dict:
+        ErrorManager.validate_engine_state(self.db_engine)
+        
+        if not workflow_id:
+            raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
+    
+        with self.db_engine.get_session_context() as session:
+            result = self.orchestration.trigger_workflow(session, workflow_id)
+        
+        logger.info(f"Workflow {workflow_id} triggered successfully")
+        return result
+    
+    @ErrorManager.operation_context("execution_cancellation")
+    def cancel_execution(self, execution_id: str) -> dict:
+        ErrorManager.validate_engine_state(self.db_engine)
+        
+        if not execution_id:
+            raise ValidationError("Execution ID is required", "Provide valid execution ID")
+        
+        with self.db_engine.get_session_context() as session:
+            result = self.orchestration.cancel_execution(session, execution_id)
+        
+        logger.info(f"Execution {execution_id} cancelled successfully")
+        return result
+    
+    @ErrorManager.operation_context("execution_retrieval")
+    def execution_get(self, execution_id: str) -> dict:
+        ErrorManager.validate_engine_state(self.db_engine)
+        
+        if not execution_id:
+            raise ValidationError("Execution ID is required", "Provide valid execution ID")
+        
+        with self.db_engine.get_session_context() as session:
+            result = self.orchestration.get_execution(session, execution_id)
+        
+        logger.info(f"Execution {execution_id} retrieved successfully")
+        return result
 
+    @ErrorManager.operation_context("execution_listing")
+    def execution_list(self, page: Optional[int] = None, page_size: Optional[int] = None) -> dict:
+        ErrorManager.validate_engine_state(self.db_engine)
+        
+        with self.db_engine.get_session_context() as session:
+            result =  self.orchestration.get_executions(session, page, page_size)
+        
+        logger.info(f"Executions listed successfully")
+        return result
+        
+        
     # API SERVER METHODS
     # ===========================================================
     @ErrorManager.operation_context("api_server_startup")
