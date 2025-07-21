@@ -134,6 +134,7 @@ class Node(BaseModel):
     workflow_id = Column(String(36), ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
     script_id = Column(String(36), ForeignKey('scripts.id', ondelete='SET NULL'), nullable=True)
     name = Column(String(255), nullable=False) 
+    priority = Column(Integer, default=0, nullable=False)
     params = Column(JSON, nullable=True, default=lambda: {})
     max_retries = Column(Integer, default=3, nullable=False)
     timeout_seconds = Column(Integer, default=300, nullable=False)
@@ -206,7 +207,6 @@ class Execution(BaseModel):
 
     workflow_id = Column(String(36), ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
     status = Column(Enum(ExecutionStatus), default=ExecutionStatus.PENDING, nullable=False)
-    priority = Column(Integer, default=0, nullable=False)
     pending_nodes = Column(Integer, default=0, nullable=False)  
     executed_nodes = Column(Integer, default=0, nullable=False) 
     results = Column(JSON, default=lambda: {}, nullable=False)

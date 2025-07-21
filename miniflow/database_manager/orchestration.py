@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 
 from .crud import (
     WorkflowCRUD, NodeCRUD, EdgeCRUD, TriggerCRUD, 
@@ -603,3 +604,191 @@ class DatabaseOrchestration:
                 script_dict['file_content'] = f"Error reading file: {str(e)}"
         
         return script_dict
+    
+
+    #  EXECUTION FUNCTIONS
+    # ==============================================================
+    def __execution_create(self, session: Session, **execution_data):
+        """
+        Execution oluştur
+        """
+        execution = self.execution_crud.create(session, **execution_data)
+        
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="execution",
+            record_id=execution.id,
+            action=AuditAction.CREATE,
+            new_values=execution.to_dict()
+        )
+
+        return execution
+    
+    #  EXECUTION INPUTS FUNCTIONS
+    # ==============================================================
+    def __execution_input_create(self, session: Session, **execution_input_data):
+        """
+        Execution input oluştur
+        """
+        execution_input = self.execution_input_crud.create(session, **execution_input_data)
+        
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="execution_input",
+            record_id=execution_input.id,
+            action=AuditAction.CREATE,
+            new_values=execution_input.to_dict()
+        )       
+
+        return execution_input
+    
+    def __execution_input_delete(self, session: Session, execution_input_id: str):
+        deleted_input = self.execution_input_crud.delete(session, execution_input_id)
+        
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="execution_input",
+            record_id=deleted_input.id,
+            action=AuditAction.DELETE,
+            old_values=deleted_input.to_dict()
+        )
+
+        return deleted_input
+
+    #  EXECUTION OUTPUTS FUNCTIONS
+    # ==============================================================
+    def __execution_output_create(self, session: Session, **execution_output_data):
+        """
+        Execution output oluştur
+        """
+        execution_output = self.execution_output_crud.create(session, **execution_output_data)
+        
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="execution_output",
+            record_id=execution_output.id,
+            action=AuditAction.CREATE,
+            new_values=execution_output.to_dict()
+        )
+
+        return execution_output
+
+    def __combine_execution_results(self, session: Session, execution_id: str):
+        """
+        Execution'ın sonuçlarını birleştir
+        """
+        # Execution'ın tüm output'larını getir
+        execution_outputs = self.execution_output_crud.get_execution_outputs_by_execution(session, execution_id)
+        
+        # Sonuçları birleştir
+        combined_results = {}
+        for output in execution_outputs:
+            combined_results[output.node_id] = {
+                'status': output.status.value if output.status else None,
+                'result_data': output.result_data,
+                'started_at': output.started_at.isoformat() if output.started_at else None,
+                'ended_at': output.ended_at.isoformat() if output.ended_at else None
+            }
+        
+        return combined_results
+
+
+    # END-TO-END EXECUTION FUNCTIONS
+    # ==============================================================
+    def trigger_workflow(self, session: Session, workflow_id: str):
+        """
+        Workflow'u tetikle
+        """
+        workflow = self.workflow_crud.find_by_id(session, workflow_id)
+        if not workflow:
+            raise BusinessLogicError(f"Workflow not found: {workflow_id}")
+        
+        nodes = self.node_crud.get_nodes_by_workflow(session, workflow_id)
+        if not nodes:
+            raise BusinessLogicError(f"No nodes found for workflow: {workflow_id}")
+        
+        execution_payload = {
+            'workflow_id': workflow.id,
+            'status': ExecutionStatus.PENDING,
+            'pending_nodes': len(nodes),
+            'started_at': datetime.utcnow(),
+        }
+
+        execution = self.__execution_create(session, **execution_payload)
+
+        input_ids = []
+        for node in nodes:
+            execution_input_payload = {
+                'execution_id': execution.id,
+                'node_id': node.id,
+                'priority': node.priority,
+                'dependency_count': self.edge_crud.get_dependency_count(session, node.id),
+            }
+
+            created_input = self.__execution_input_create(session, **execution_input_payload)
+            input_ids.append(created_input.id)  # Store just the ID, not the object
+
+        return {
+            'execution_id': execution.id,
+            'pending_nodes': len(nodes),
+            'pending_nodes_ids': input_ids,
+            'started_at': execution.started_at.isoformat() if execution.started_at else None,
+        }
+    
+    def get_execution(self, session: Session, execution_id: str):
+        """
+        Execution detayını getir
+        """
+        # 1. Execution'i bul
+        execution = self.execution_crud.find_by_id(session, execution_id)
+        if not execution:
+            raise BusinessLogicError(f"Execution not found: {execution_id}")
+        
+        execution_dict = execution.to_dict()
+        
+        return execution_dict
+
+
+    def get_executions(self, session: Session, page: Optional[int] = None, page_size: Optional[int] = None):
+        """
+        Tüm execution'ları listele
+        """
+        executions = self.execution_crud.get_all(session)
+        execution_list = [execution.to_dict() for execution in executions]
+
+        return execution_list
+    
+
+    def cancel_execution(self, session: Session, execution_id: str):
+        """
+        Execution'ı iptal et
+        """
+        execution = self.execution_crud.find_by_id(session, execution_id)
+        if not execution:
+            raise BusinessLogicError(f"Execution not found: {execution_id}")
+        
+        execution_inputs = self.execution_input_crud.get_execution_inputs_by_execution(session, execution_id)
+        execution_input_ids = []
+        for input in execution_inputs:
+            deleted_input = self.__execution_input_delete(session, input.id)
+            execution_input_ids.append(deleted_input.id)
+        
+
+        result = self.__combine_execution_results(session, execution_id)
+        for input_id in execution_input_ids:
+            result[input_id] = "CANCELLED"
+
+        execution_payload = {
+            'status': ExecutionStatus.CANCELLED,
+            'results': result,
+            'ended_at': datetime.utcnow(),
+        }
+        execution = self.execution_crud.update(session, execution_id, **execution_payload)
+
+        return {
+            'execution_id': execution.id,
+            'pending_nodes': execution.pending_nodes,
+            'executed_nodes': execution.executed_nodes,
+            'results': result,
+            'started_at': execution.started_at.isoformat() if execution.started_at else None,
+        }

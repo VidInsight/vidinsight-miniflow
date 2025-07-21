@@ -31,3 +31,8 @@ class ExecutionInputCRUD(BaseCRUD[ExecutionInput]):
     - bulk_update()
     - bulk_delete()
     """
+
+    def get_execution_inputs_by_execution(self, session: Session, execution_id: str) -> List[ExecutionInput]:
+        """Get all execution inputs for a specific execution"""
+        stmt = select(self.model).where(self.model.execution_id == execution_id)
+        return list(session.execute(stmt).scalars().all())

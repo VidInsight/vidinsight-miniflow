@@ -32,3 +32,8 @@ class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput]):
     - bulk_update()
     - bulk_delete()
     """
+
+    def get_execution_outputs_by_execution(self, session: Session, execution_id: str) -> List[ExecutionOutput]:
+        """Get all execution outputs for a specific execution"""
+        stmt = select(self.model).where(self.model.execution_id == execution_id)
+        return list(session.execute(stmt).scalars().all())

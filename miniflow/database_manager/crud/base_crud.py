@@ -58,13 +58,13 @@ class BaseCRUD(Generic[ModelType]):
         session.flush()
         return db_object
 
-    def delete(self, session: Session, record_id: Union[str, int]) -> bool:
+    def delete(self, session: Session, record_id: Union[str, int]) -> ModelType:
         """Kayıt sil"""
         db_object = self.find_by_id(session, record_id)
         session.delete(db_object)
         session.flush()
         
-        return True
+        return db_object
 
     # EKSTRA CRUD
     # ============================================================== 

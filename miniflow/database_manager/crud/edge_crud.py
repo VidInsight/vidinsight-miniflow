@@ -39,3 +39,11 @@ class EdgeCRUD(BaseCRUD[Edge]):
             (self.model.from_node_id.in_(node_ids)) | (self.model.to_node_id.in_(node_ids))
         )
         return list(session.execute(stmt).scalars().all())
+
+    def get_dependency_count(self, session: Session, node_id: str) -> int:
+        """
+        Bir node'un kaç başka node'a bağımlı olduğunu hesapla
+        (kaç edge'in to_node_id'si bu node'a eşit)
+        """
+        stmt = select(func.count(self.model.id)).where(self.model.to_node_id == node_id)
+        return session.execute(stmt).scalar_one() or 0
