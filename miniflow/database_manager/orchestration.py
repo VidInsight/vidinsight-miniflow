@@ -721,7 +721,7 @@ class DatabaseOrchestration:
             execution_input_payload = {
                 'execution_id': execution.id,
                 'node_id': node.id,
-                'priority': node.priority,
+                'priority': workflow.priority,
                 'dependency_count': self.edge_crud.get_dependency_count(session, node.id),
             }
 
