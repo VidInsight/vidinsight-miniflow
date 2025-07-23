@@ -307,4 +307,31 @@ INDEXES = [
     
     # Composite (en önemliler)
     "CREATE INDEX IF NOT EXISTS idx_executions_workflow_status ON executions(workflow_id, status)",
+    
+    # SCHEDULER PERFORMANCE INDEXES
+    # ==============================================================
+    # Ready tasks query optimization
+    "CREATE INDEX IF NOT EXISTS idx_execution_inputs_dependency_count ON execution_inputs(dependency_count)",
+    "CREATE INDEX IF NOT EXISTS idx_execution_inputs_ready_tasks ON execution_inputs(dependency_count, priority DESC, created_at)",
+    
+    # Node dependency resolution
+    "CREATE INDEX IF NOT EXISTS idx_edges_dependency_lookup ON edges(from_node_id, to_node_id, condition_type)",
+    "CREATE INDEX IF NOT EXISTS idx_execution_inputs_node_execution ON execution_inputs(node_id, execution_id)",
+    
+    # Output processing optimization
+    "CREATE INDEX IF NOT EXISTS idx_execution_outputs_node_execution ON execution_outputs(execution_id, node_id)",
+    "CREATE INDEX IF NOT EXISTS idx_execution_outputs_status ON execution_outputs(status)",
+    "CREATE INDEX IF NOT EXISTS idx_execution_outputs_execution_status ON execution_outputs(execution_id, status)",
+    
+    # Dynamic parameter resolution
+    "CREATE INDEX IF NOT EXISTS idx_nodes_name_workflow ON nodes(name, workflow_id)",
+    "CREATE INDEX IF NOT EXISTS idx_execution_outputs_node_name_lookup ON execution_outputs(execution_id, node_id, status)",
+    
+    # Execution progress tracking
+    "CREATE INDEX IF NOT EXISTS idx_executions_pending_nodes ON executions(pending_nodes)",
+    "CREATE INDEX IF NOT EXISTS idx_executions_status_progress ON executions(status, pending_nodes, executed_nodes)",
+    
+    # Script lookups for payload creation
+    "CREATE INDEX IF NOT EXISTS idx_nodes_script_id ON nodes(script_id)",
+    "CREATE INDEX IF NOT EXISTS idx_scripts_path ON scripts(script_path)",
 ]

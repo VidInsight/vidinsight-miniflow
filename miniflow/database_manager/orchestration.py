@@ -14,6 +14,7 @@ from .models import (
     WorkflowStatus, ExecutionStatus, TriggerType, ConditionType, AuditAction
 )
 from ..exceptions import ValidationError, BusinessLogicError
+from ..utils import extract_dynamic_node_params,  split_variable_refrence
 
 class DatabaseOrchestration:
     def __init__(self):
@@ -748,7 +749,6 @@ class DatabaseOrchestration:
         
         return execution_dict
 
-
     def get_executions(self, session: Session, page: Optional[int] = None, page_size: Optional[int] = None):
         """
         Tüm execution'ları listele
@@ -757,7 +757,6 @@ class DatabaseOrchestration:
         execution_list = [execution.to_dict() for execution in executions]
 
         return execution_list
-    
 
     def cancel_execution(self, session: Session, execution_id: str):
         """
@@ -791,4 +790,254 @@ class DatabaseOrchestration:
             'executed_nodes': execution.executed_nodes,
             'results': result,
             'started_at': execution.started_at.isoformat() if execution.started_at else None,
+        }
+    
+    def get_tasks(self, session: Session, page: Optional[int] = None, page_size: Optional[int] = None):
+        """
+        Tüm execution input'larını listele
+        """
+        tasks = self.execution_input_crud.get_all(session)
+        task_list = [task.to_dict() for task in tasks]
+
+        return task_list
+
+
+# END-TO-END SCHEDULER FUNCTIONS
+# ==============================================================
+    def get_ready_tasks(self, session: Session, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Get ready tasks for execution (dependency_count = 0)
+        Returns enriched task data with node and execution info
+        """
+        return self.execution_input_crud.get_ready_tasks_with_details(session, limit)
+
+    def remove_completed_tasks(self, session: Session, task_ids: List[str]) -> int:
+        """
+        Bulk remove completed tasks from execution_inputs table
+        """
+        return self.execution_input_crud.bulk_delete_by_ids(session, task_ids)
+
+    def create_task_payload(self, session: Session, task: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create execution payload for parallelism engine
+        1. Extract dynamic node params
+        2. Split variable references  
+        3. Get execution results from output table
+        4. Build complete execution context
+        """
+        try:
+            # Extract basic task information
+            execution_id = task['execution_id']
+            node_id = task['node_id']
+            node_name = task['node_name']
+            script_path = task['script_path']
+            node_params = task['node_params'] or {}
+            
+            # Resolve dynamic parameters
+            resolved_params = self._resolve_dynamic_parameters(
+                session, execution_id, node_params
+            )
+            
+            # Create the execution payload
+            payload = {
+                'id': task['task_id'],  # Use task_id as unique identifier
+                'execution_id': execution_id,
+                'node_id': node_id,
+                'node_name': node_name,
+                'script_path': script_path,
+                'context': resolved_params,
+                'max_retries': task.get('max_retries', 3),
+                'timeout_seconds': task.get('timeout_seconds', 300),
+                'workflow_id': task['workflow_id']
+            }
+            
+            return payload
+            
+        except Exception as e:
+            # Log error and return None to indicate failure
+            print(f"[ORCHESTRATION] Error creating payload for task {task.get('task_id', 'unknown')}: {e}")
+            return None
+
+    def _resolve_dynamic_parameters(self, session: Session, execution_id: str, 
+                                  node_params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve dynamic parameters in node_params
+        Format: variable_name: node_name.variable_name
+        """
+        if not node_params:
+            return {}
+            
+        resolved_params = {}
+        
+        for param_key, param_value in node_params.items():
+            if isinstance(param_value, str) and '.' in param_value:
+                # Check if this is a dynamic reference (node_name.variable_name)
+                try:
+                    parts = param_value.split('.', 1)
+                    if len(parts) == 2:
+                        referenced_node_name, variable_name = parts
+                        
+                        # Get the result data from the referenced node
+                        result_data = self.execution_output_crud.get_node_result_data(
+                            session, execution_id, referenced_node_name
+                        )
+                        
+                        if result_data and variable_name in result_data:
+                            resolved_params[param_key] = result_data[variable_name]
+                        else:
+                            # If reference not found, use original value
+                            resolved_params[param_key] = param_value
+                    else:
+                        # Not a dynamic reference, use as-is
+                        resolved_params[param_key] = param_value
+                except Exception as e:
+                    # On any error, use original value
+                    print(f"[ORCHESTRATION] Error resolving parameter {param_key}: {e}")
+                    resolved_params[param_key] = param_value
+            else:
+                # Static parameter, use as-is
+                resolved_params[param_key] = param_value
+                
+        return resolved_params
+
+    def process_execution_result(self, session: Session, result: Dict[str, Any]) -> bool:
+        """
+        Process single execution result
+        1. Create execution_output record
+        2. Update dependency counts for dependent nodes
+        3. Update execution progress
+        4. Check for workflow completion
+        """
+        try:
+            execution_id = result.get('execution_id')
+            node_id = result.get('node_id')
+            status = result.get('status')  # 'success' or 'failed'
+            result_data = result.get('result_data') or result.get('results', {})
+            
+            if not all([execution_id, node_id, status]):
+                print(f"[ORCHESTRATION] Missing required fields in result: {result}")
+                return False
+            
+            # Convert status to ExecutionOutputStatus enum
+            from .models import ExecutionOutputStatus
+            output_status = (
+                ExecutionOutputStatus.SUCCESS if status == 'success' 
+                else ExecutionOutputStatus.FAILURE
+            )
+            
+            # Check if output already exists (idempotency)
+            if self.execution_output_crud.check_output_exists(session, execution_id, node_id):
+                print(f"[ORCHESTRATION] Output already exists for execution {execution_id}, node {node_id}")
+                return True
+            
+            # Create execution output record
+            self.execution_output_crud.create_execution_output(
+                session=session,
+                execution_id=execution_id,
+                node_id=node_id,
+                status=output_status,
+                result_data=result_data,
+                started_at=datetime.utcnow(),  # Could be passed from result
+                ended_at=datetime.utcnow()
+            )
+            
+            # Update execution progress
+            self.execution_crud.increment_executed_nodes(session, execution_id)
+            
+            # Mark execution as running if it was pending
+            self.execution_crud.mark_execution_running(session, execution_id)
+            
+            # Update dependent tasks only if this node succeeded
+            if status == 'success':
+                self._update_dependent_tasks(session, node_id, execution_id)
+            
+            # Check for workflow completion
+            if self.execution_crud.check_execution_completion(session, execution_id):
+                self._complete_execution(session, execution_id)
+            
+            return True
+            
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error processing execution result: {e}")
+            return False
+
+    def _update_dependent_tasks(self, session: Session, completed_node_id: str, 
+                               execution_id: str) -> List[str]:
+        """
+        Update dependency counts for nodes dependent on completed node
+        Returns list of newly ready task IDs
+        """
+        try:
+            # Get dependent node IDs
+            dependent_node_ids = self.execution_input_crud.get_dependent_nodes(
+                session, completed_node_id, execution_id
+            )
+            
+            if not dependent_node_ids:
+                return []
+            
+            # Decrease dependency count for dependent nodes
+            updated_count = self.execution_input_crud.decrease_dependency_count_for_nodes(
+                session, dependent_node_ids, execution_id
+            )
+            
+            print(f"[ORCHESTRATION] Updated {updated_count} dependent tasks")
+            return dependent_node_ids
+            
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error updating dependent tasks: {e}")
+            return []
+
+    def _complete_execution(self, session: Session, execution_id: str) -> None:
+        """
+        Complete the execution and gather final results
+        """
+        try:
+            # Get execution progress
+            progress = self.execution_output_crud.get_execution_progress(session, execution_id)
+            
+            # Determine final status based on results
+            final_status = ExecutionStatus.COMPLETED
+            if progress['failure'] > 0 or progress['timeout'] > 0:
+                final_status = ExecutionStatus.FAILED
+            elif progress['cancelled'] > 0:
+                final_status = ExecutionStatus.CANCELLED
+            
+            # Mark execution as complete
+            self.execution_crud.mark_execution_completed(
+                session=session,
+                execution_id=execution_id,
+                final_status=final_status,
+                results=progress,
+                ended_at=datetime.utcnow()
+            )
+            
+            print(f"[ORCHESTRATION] Execution {execution_id} completed with status {final_status.value}")
+            
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error completing execution {execution_id}: {e}")
+
+    def process_execution_results_batch(self, session: Session, 
+                                       results: List[Dict[str, Any]]) -> Dict[str, int]:
+        """
+        Process multiple execution results in batch
+        Returns success/failure counts
+        """
+        success_count = 0
+        failure_count = 0
+        
+        for result in results:
+            try:
+                if self.process_execution_result(session, result):
+                    success_count += 1
+                else:
+                    failure_count += 1
+            except Exception as e:
+                print(f"[ORCHESTRATION] Error in batch processing: {e}")
+                failure_count += 1
+        
+        return {
+            'success': success_count,
+            'failure': failure_count,
+            'total': len(results)
         }
