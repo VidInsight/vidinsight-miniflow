@@ -17,31 +17,64 @@ from .database_manager import DatabaseConfig, DatabaseEngine, DatabaseOrchestrat
 from .database_manager import get_sqlite_config, get_mysql_config, get_postgresql_config
 from .database_manager import create_database_engine
 
+# Parallelism Engine
+from .parallelism_engine import Manager
+
+# Scheduler
+from .scheduler import MiniflowInputMonitor, MiniflowOutputMonitor
+
 setup_logging()
 logger = logging.getLogger(__name__)
 logger.debug(f"Logger tanımları tanımlandı")
 
 
 class MiniflowCore:
-    def __init__(self, db_type: str,  **db_params):
+    def __init__(self, db_type: str, enable_scheduler: bool = True, **db_params):
         # Database
         self.db_type: str = db_type
         self.db_engine: DatabaseEngine = None
         self.orchestration: DatabaseOrchestration = None
         self.scripts_dir: Path = Path("scripts")
         self.db_config: DatabaseConfig = self.__create_config(db_type, **db_params)
-        logger.debug(f"Database tanımları tanımlandı")
+        
+        # Parallelism Engine
+        self.execution_engine: Manager = None
+        
+        # Scheduler
+        self.enable_scheduler: bool = enable_scheduler
+        self.input_monitor: MiniflowInputMonitor = None
+        self.output_monitor: MiniflowOutputMonitor = None
+        
+        logger.debug(f"MiniflowCore initialized with scheduler={'enabled' if enable_scheduler else 'disabled'}")
 
     @ErrorManager.operation_context("core_startup")
     def start(self) -> None:
         # 1. Database'i başlat
         self.__start_database_engine()
-        logger.info("MiniflowCore started successfully")
+        
+        # 2. Parallelism Engine'i başlat
+        self.__start_parallelism_engine()
+        
+        # 3. Scheduler'ı başlat (isteğe bağlı)
+        if self.enable_scheduler:
+            self.__start_scheduler()
+        
+        logger.info(f"MiniflowCore started successfully (scheduler={'enabled' if self.enable_scheduler else 'disabled'})")
 
     @ErrorManager.operation_context("core_shutdown")
     def stop(self) -> None:
-        # n. Database'i durdur
+        # Reverse order shutdown: Scheduler -> Engine -> Database
+        
+        # 1. Scheduler'ı durdur
+        if self.enable_scheduler:
+            self.__stop_scheduler()
+        
+        # 2. Parallelism Engine'i durdur
+        self.__stop_parallelism_engine()
+        
+        # 3. Database'i durdur
         self.__stop_database_engine()
+        
         logger.info("MiniflowCore stopped successfully")
 
     # DATABASE MANAGER METOTLARI
@@ -115,6 +148,101 @@ class MiniflowCore:
             finally:
                 self.db_engine = None
                 self.orchestration = None
+
+    def __start_parallelism_engine(self):
+        """Start the parallelism engine for task execution"""
+        try:
+            self.execution_engine = Manager()
+            self.execution_engine.start()
+            logger.info("Parallelism engine started successfully")
+            
+        except Exception as e:
+            # Cleanup on failure
+            if self.execution_engine:
+                try:
+                    self.execution_engine.shutdown()
+                except:
+                    pass
+                self.execution_engine = None
+                
+            raise EngineError(
+                "Failed to start parallelism engine",
+                f"Error during engine initialization: {str(e)}"
+            )
+
+    def __stop_parallelism_engine(self):
+        """Stop the parallelism engine"""
+        if self.execution_engine:
+            try:
+                self.execution_engine.shutdown()
+                logger.info("Parallelism engine stopped successfully")
+            except Exception as e:
+                logger.warning(f"Error stopping parallelism engine: {e}")
+            finally:
+                self.execution_engine = None
+
+    def __start_scheduler(self):
+        """Start the input and output monitors"""
+        try:
+            # Validate dependencies
+            if not self.db_engine or not self.orchestration:
+                raise SchedulerError("Database engine must be started before scheduler")
+            
+            if not self.execution_engine:
+                raise SchedulerError("Parallelism engine must be started before scheduler")
+            
+            # Start Input Monitor
+            self.input_monitor = MiniflowInputMonitor(
+                database_engine=self.db_engine,
+                database_orchestration=self.orchestration,
+                execution_engine=self.execution_engine,
+                polling_interval=0.05,  # Faster polling for better responsiveness
+                batch_size=100,         # Larger batch size for concurrent workflows
+                worker_threads=8        # More worker threads for payload creation
+            )
+            self.input_monitor.start()
+            
+            # Start Output Monitor
+            self.output_monitor = MiniflowOutputMonitor(
+                database_engine=self.db_engine,
+                database_orchestration=self.orchestration,
+                execution_engine=self.execution_engine,
+                polling_interval=0.5,
+                batch_size=50,
+                worker_threads=4
+            )
+            self.output_monitor.start()
+            
+            logger.info("Scheduler started successfully (Input & Output monitors running)")
+            
+        except Exception as e:
+            # Cleanup on failure
+            self.__stop_scheduler()
+            raise SchedulerError(
+                "Failed to start scheduler",
+                f"Error during scheduler initialization: {str(e)}"
+            )
+
+    def __stop_scheduler(self):
+        """Stop the input and output monitors"""
+        # Stop monitors
+        if self.input_monitor:
+            try:
+                self.input_monitor.stop()
+                logger.info("Input monitor stopped successfully")
+            except Exception as e:
+                logger.warning(f"Error stopping input monitor: {e}")
+            finally:
+                self.input_monitor = None
+        
+        if self.output_monitor:
+            try:
+                self.output_monitor.stop()
+                logger.info("Output monitor stopped successfully")
+            except Exception as e:
+                logger.warning(f"Error stopping output monitor: {e}")
+            finally:
+                self.output_monitor = None
 
     # SCRIPT METOTLARI 
     # ===========================================================
@@ -198,7 +326,10 @@ class MiniflowCore:
     @ErrorManager.operation_context("workflow_creation")
     def workflow_create(self, workflow_data: dict) -> dict:
         ErrorManager.validate_engine_state(self.db_engine)
-        ErrorManager.validate_required_fields(workflow_data, ["name", "nodes", "edges"], "workflow creation")
+        ErrorManager.validate_required_fields(workflow_data, ["name", "nodes"], "workflow creation")
+        # Ensure edges exist even if empty
+        if "edges" not in workflow_data:
+            workflow_data["edges"] = []
         
         with self.db_engine.get_session_context() as session:
             result = self.orchestration.create_workflow(session, workflow_data)
@@ -311,7 +442,13 @@ class MiniflowCore:
             from .api import app
             
             logger.info(f"Starting Miniflow API Server at {host}:{port}")
-            logger.info(f"Documentation available at: http://{host}:{port}/docs")
+            logger.info(f"API Documentation available at: http://{host}:{port}/docs")
+            logger.info(f"Health Check available at: http://{host}:{port}/health")
+            
+            if self.enable_scheduler:
+                logger.info("Scheduler is enabled - workflows will be automatically executed")
+            else:
+                logger.info("Scheduler is disabled - workflows must be executed manually")
             
             uvicorn.run(
                 app,
@@ -328,24 +465,163 @@ class MiniflowCore:
             ) from e
 
 
+    def health_check(self) -> dict:
         """Check system health status"""
         try:
-            ErrorManager.validate_engine_state(self.db_engine)
-            
-            # Test database connection
-            with self.db_engine.get_session_context() as session:
-                # Simple query to test connection
-                pass
-                
-            return {
+            health_status = {
                 "status": "healthy",
-                "database": "connected",
-                "scripts_dir": "accessible" if self.scripts_dir.exists() else "missing"
+                "components": {
+                    "database": "disconnected",
+                    "parallelism_engine": "stopped",
+                    "scheduler": {
+                        "enabled": self.enable_scheduler,
+                        "input_monitor": "stopped",
+                        "output_monitor": "stopped"
+                    }
+                },
+                "scripts_dir": "missing"
             }
+            
+            # Check database
+            if self.db_engine:
+                try:
+                    with self.db_engine.get_session_context() as session:
+                        # Simple query to test connection
+                        pass
+                    health_status["components"]["database"] = "connected"
+                except:
+                    health_status["components"]["database"] = "error"
+                    health_status["status"] = "unhealthy"
+            else:
+                health_status["status"] = "unhealthy"
+            
+            # Check parallelism engine
+            if self.execution_engine and self.execution_engine.started:
+                health_status["components"]["parallelism_engine"] = "running"
+            elif self.execution_engine:
+                health_status["components"]["parallelism_engine"] = "stopped"
+                
+            # Check scheduler components
+            if self.enable_scheduler:
+                if self.input_monitor and self.input_monitor.is_running():
+                    health_status["components"]["scheduler"]["input_monitor"] = "running"
+                elif self.input_monitor:
+                    health_status["components"]["scheduler"]["input_monitor"] = "stopped"
+                    
+                if self.output_monitor and self.output_monitor.is_running():
+                    health_status["components"]["scheduler"]["output_monitor"] = "running"
+                elif self.output_monitor:
+                    health_status["components"]["scheduler"]["output_monitor"] = "stopped"
+            
+            # Check scripts directory
+            if self.scripts_dir.exists():
+                health_status["scripts_dir"] = "accessible"
+                
+            return health_status
             
         except Exception as e:
             return {
                 "status": "unhealthy",
                 "error": str(e),
-                "database": "disconnected" if not self.db_engine else "error"
+                "components": {
+                    "database": "error",
+                    "parallelism_engine": "error",
+                    "scheduler": "error"
+                }
             }
+
+    def get_system_status(self) -> dict:
+        """Get detailed system status information"""
+        status = {
+            "miniflow_core": {
+                "database_type": self.db_type,
+                "scheduler_enabled": self.enable_scheduler,
+                "scripts_directory": str(self.scripts_dir)
+            },
+            "components": {
+                "database_engine": {
+                    "running": self.db_engine is not None and self.db_engine.is_alive,
+                    "connection_info": self.db_engine.get_connection_info() if self.db_engine else None
+                },
+                "parallelism_engine": {
+                    "running": self.execution_engine is not None and self.execution_engine.started,
+                    "queue_status": {
+                        "input_queue_size": "unknown",  # Could be enhanced to get actual size
+                        "output_queue_size": "unknown"
+                    } if self.execution_engine else None
+                },
+                "scheduler": {
+                    "enabled": self.enable_scheduler,
+                    "input_monitor": {
+                        "running": self.input_monitor.is_running() if self.input_monitor else False,
+                        "status": "active" if (self.input_monitor and self.input_monitor.is_running()) else "inactive"
+                    } if self.enable_scheduler else None,
+                    "output_monitor": {
+                        "running": self.output_monitor.is_running() if self.output_monitor else False,
+                        "status": "active" if (self.output_monitor and self.output_monitor.is_running()) else "inactive"
+                    } if self.enable_scheduler else None
+                }
+            }
+        }
+        
+        return status
+
+    # DEMONSTRATION AND TESTING METHODS
+    # ===========================================================
+    
+    def demo_workflow_execution(self) -> dict:
+        """
+        Demonstration method showing complete workflow execution with scheduler
+        Creates a simple workflow and shows the execution flow
+        """
+        try:
+            ErrorManager.validate_engine_state(self.db_engine)
+            
+            if not self.enable_scheduler:
+                return {
+                    "status": "error",
+                    "message": "Scheduler must be enabled for automatic workflow execution",
+                    "suggestion": "Initialize MiniflowCore with enable_scheduler=True"
+                }
+            
+            logger.info("Starting workflow execution demonstration...")
+            
+            # Check if required components are running
+            health = self.health_check()
+            if health["status"] != "healthy":
+                return {
+                    "status": "error", 
+                    "message": "System is not healthy",
+                    "health_status": health
+                }
+            
+            return {
+                "status": "ready",
+                "message": "System is ready for workflow execution",
+                "next_steps": [
+                    "1. Create a script using script_create()",
+                    "2. Create a workflow using workflow_create()",
+                    "3. Trigger workflow using trigger_workflow()",
+                    "4. Monitor execution with execution_get() or health_check()"
+                ],
+                "components": {
+                    "database": "✓ Connected",
+                    "parallelism_engine": "✓ Running",
+                    "scheduler": "✓ Active (Input & Output monitors running)",
+                    "ready_tasks": self._get_ready_task_count()
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Demo execution failed: {str(e)}"
+            }
+    
+    def _get_ready_task_count(self) -> int:
+        """Helper method to get count of ready tasks"""
+        try:
+            with self.db_engine.get_session_context() as session:
+                return self.orchestration.execution_input_crud.count_ready_tasks(session)
+        except:
+            return -1
