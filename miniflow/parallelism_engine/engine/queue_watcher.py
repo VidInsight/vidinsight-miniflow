@@ -36,22 +36,36 @@ class QueueWatcher:
         self._start_watch_threads(self._watch_input)
 
     def _watch_input(self):
-        """Input Queue tracker"""
+        """Input Queue tracker - optimized for batch processing"""
         while not self.shutdown_event.is_set():
             try:
-                # Non-blocking get with timeout
-                item = self.input_queue.get_with_timeout(timeout=1.0)
-                if item is not None:
-                    with self.process_lock:  # Thread-safe process assignment
-                        if len(self.active_processes) > 0:
-                            self._create_thread(item)
-                            time.sleep(1.5)
-                        else:
-                            # Re-queue item if no processes available
-                            self.input_queue.put(item)
+                # Process multiple items in quick succession for better concurrency
+                items_processed = 0
+                max_batch_size = 20
+                
+                while items_processed < max_batch_size and not self.shutdown_event.is_set():
+                    # Non-blocking get with shorter timeout for responsiveness
+                    item = self.input_queue.get_with_timeout(timeout=0.1)
+                    if item is not None:
+                        with self.process_lock:  # Thread-safe process assignment
+                            if len(self.active_processes) > 0:
+                                self._create_thread(item)
+                                items_processed += 1
+                            else:
+                                # Re-queue item if no processes available
+                                self.input_queue.put(item)
+                                break
+                    else:
+                        # No more items available, break batch processing
+                        break
+                
+                # Small sleep only if no items were processed
+                if items_processed == 0:
+                    time.sleep(0.1)
 
             except Exception as e:
                 print(f"Input watcher error: {e}")
+                time.sleep(0.1)
 
     def _get_process_thread_counts(self):
         thread_counts = []
@@ -74,7 +88,7 @@ class QueueWatcher:
         if not self.active_processes or None in self.thread_count_list:
             return None
 
-        max_thread = 3
+        max_thread = 10  # Increased from 3 to 10 for better concurrency
 
         thread_count_list = self.thread_count_list
         selected_process = None
@@ -150,7 +164,7 @@ class QueueWatcher:
                 self.thread_count_list = self._get_process_thread_counts()
                 avg_threads = sum(t for t in self.thread_count_list if t is not None) / max(1, len(self.thread_count_list))
                 print(self.thread_count_list)
-                if len(self.active_processes) < self.max_cpu_count and avg_threads > 2:
+                if len(self.active_processes) < self.max_cpu_count and avg_threads > 1.5:
                     print("[Parallelism Engine] Scaling up processes")
                     self._start_processes(1)
 
