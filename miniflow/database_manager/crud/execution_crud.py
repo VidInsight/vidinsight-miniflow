@@ -190,3 +190,12 @@ class ExecutionCRUD(BaseCRUD[Execution]):
             .order_by(self.model.started_at)
         )
         return list(session.execute(stmt).scalars().all())
+
+    def get_executions_by_workflow(self, session: Session, workflow_id: str) -> List[Execution]:
+        """Get all executions for a specific workflow"""
+        stmt = (
+            select(self.model)
+            .where(self.model.workflow_id == workflow_id)
+            .order_by(desc(self.model.created_at))
+        )
+        return list(session.execute(stmt).scalars().all())

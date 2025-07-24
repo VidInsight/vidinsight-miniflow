@@ -39,6 +39,13 @@ class MiniflowOutputMonitor:
         self.max_polling_interval = 2.0
         self.current_polling_interval = polling_interval
         self.empty_cycles = 0
+        
+        # Statistics
+        self.stats = {
+            'failed_results': 0,
+            'successful_results': 0,
+            'total_processed': 0
+        }
 
     def is_running(self):
         return self.running and self.main_thread and self.main_thread.is_alive() 
@@ -174,7 +181,11 @@ class MiniflowOutputMonitor:
             logger.debug(f"Geçersiz status: {result['status']}")
             return False
         
-        # Accept either 'results' or 'result_data' field
+        # For failed results, we don't require result_data
+        if result['status'] == 'failed':
+            return True
+            
+        # For successful results, accept either 'results' or 'result_data' field
         if 'results' not in result and 'result_data' not in result:
             logger.debug("Result data eksik (ne 'results' ne de 'result_data' var)")
             return False

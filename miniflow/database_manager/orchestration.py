@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from sqlalchemy import select, func
 
 from .crud import (
     WorkflowCRUD, NodeCRUD, EdgeCRUD, TriggerCRUD, 
@@ -14,7 +15,7 @@ from .models import (
     WorkflowStatus, ExecutionStatus, TriggerType, ConditionType, AuditAction
 )
 from ..exceptions import ValidationError, BusinessLogicError
-from ..utils import extract_dynamic_node_params,  split_variable_refrence
+from ..utils import extract_dynamic_node_params,  split_variable_reference
 
 class DatabaseOrchestration:
     def __init__(self):
@@ -518,7 +519,11 @@ class DatabaseOrchestration:
         Tüm workflow'ları listele
         """
         workflows = self.workflow_crud.get_all(session)
-        workflow_list = [workflow.to_dict() for workflow in workflows]
+        workflow_list = []
+        for workflow in workflows:
+            workflow_dict = workflow.to_dict()
+            workflow_dict['workflow_id'] = workflow_dict['id']  # Add consistent field name
+            workflow_list.append(workflow_dict)
             
         return workflow_list
 
@@ -533,15 +538,18 @@ class DatabaseOrchestration:
         
         workflow_dict = workflow.to_dict()
         
-        # 2. Node'ları getir
+        # 2. Add consistent field name for API compatibility
+        workflow_dict['workflow_id'] = workflow_dict['id']
+        
+        # 3. Node'ları getir
         nodes = self.node_crud.get_nodes_by_workflow(session, workflow_id)
         workflow_dict['nodes'] = [node.to_dict() for node in nodes]
         
-        # 3. Edge'leri getir
+        # 4. Edge'leri getir
         edges = self.edge_crud.get_edges_by_workflow(session, workflow_id)
         workflow_dict['edges'] = [edge.to_dict() for edge in edges]
         
-        # 4. Trigger'ları getir
+        # 5. Trigger'ları getir
         triggers = self.trigger_crud.get_triggers_by_workflow(session, workflow_id)
         workflow_dict['triggers'] = [trigger.to_dict() for trigger in triggers]
         
@@ -581,7 +589,11 @@ class DatabaseOrchestration:
         Tüm script'leri listele
         """
         scripts = self.script_crud.get_all(session)
-        script_list = [script.to_dict() for script in scripts]
+        script_list = []
+        for script in scripts:
+            script_dict = script.to_dict()
+            script_dict['script_id'] = script_dict['id']  # Add consistent field name
+            script_list.append(script_dict)
 
         return script_list
 
@@ -596,7 +608,10 @@ class DatabaseOrchestration:
         
         script_dict = script.to_dict()
         
-        # 2. Eğer content isteniyorsa, dosyadan oku
+        # 2. Add consistent field name for API compatibility
+        script_dict['script_id'] = script_dict['id']
+        
+        # 3. Eğer content isteniyorsa, dosyadan oku
         if include_content and script.script_path:
             try:
                 with open(script.script_path, 'r') as f:
@@ -674,22 +689,71 @@ class DatabaseOrchestration:
 
         return execution_output
 
-    def __combine_execution_results(self, session: Session, execution_id: str):
+    def __combine_execution_results(self, session: Session, execution_id: str) -> Dict[str, Any]:
         """
-        Execution'ın sonuçlarını birleştir
+        Combine all execution results into a single comprehensive file
+        Returns complete execution summary with all node results
         """
-        # Execution'ın tüm output'larını getir
+        # Get execution details
+        execution = self.execution_crud.find_by_id(session, execution_id)
+        
+        # Get all execution outputs
         execution_outputs = self.execution_output_crud.get_execution_outputs_by_execution(session, execution_id)
         
-        # Sonuçları birleştir
-        combined_results = {}
+        # Get execution progress statistics
+        progress = self.execution_output_crud.get_execution_progress(session, execution_id)
+        
+        # Build comprehensive results
+        combined_results = {
+            'execution_id': execution_id,
+            'workflow_id': execution.workflow_id,
+            'execution_status': execution.status.value,
+            'started_at': execution.started_at.isoformat() if execution.started_at else None,
+            'ended_at': execution.ended_at.isoformat() if execution.ended_at else None,
+            'total_duration_seconds': (
+                (execution.ended_at - execution.started_at).total_seconds() 
+                if execution.ended_at and execution.started_at else None
+            ),
+            'summary': {
+                'total_nodes': progress['total'],
+                'successful_nodes': progress['success'], 
+                'failed_nodes': progress['failure'],
+                'cancelled_nodes': progress['cancelled'],
+                'timeout_nodes': progress['timeout'],
+                'success_rate': (
+                    (progress['success'] / progress['total'] * 100) 
+                    if progress['total'] > 0 else 0
+                )
+            },
+            'node_results': {}
+        }
+        
+        # Add detailed node results
         for output in execution_outputs:
-            combined_results[output.node_id] = {
-                'status': output.status.value if output.status else None,
-                'result_data': output.result_data,
+            # Get node details
+            node = self.node_crud.find_by_id(session, output.node_id)
+            
+            node_result = {
+                'node_id': output.node_id,
+                'node_name': node.name if node else 'unknown',
+                'status': output.status.value,
+                'result_data': output.result_data or {},
                 'started_at': output.started_at.isoformat() if output.started_at else None,
-                'ended_at': output.ended_at.isoformat() if output.ended_at else None
+                'ended_at': output.ended_at.isoformat() if output.ended_at else None,
+                'duration_seconds': (
+                    (output.ended_at - output.started_at).total_seconds()
+                    if output.ended_at and output.started_at else None
+                )
             }
+            
+            combined_results['node_results'][node.name if node else output.node_id] = node_result
+        
+        # Add metadata
+        combined_results['metadata'] = {
+            'generated_at': datetime.utcnow().isoformat(),
+            'total_execution_time': combined_results['total_duration_seconds'],
+            'file_format_version': '1.0'
+        }
         
         return combined_results
 
@@ -746,6 +810,9 @@ class DatabaseOrchestration:
             raise BusinessLogicError(f"Execution not found: {execution_id}")
         
         execution_dict = execution.to_dict()
+        
+        # 2. Add consistent field name for API compatibility
+        execution_dict['execution_id'] = execution_dict['id']
         
         return execution_dict
 
@@ -862,51 +929,100 @@ class DatabaseOrchestration:
                                   node_params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Resolve dynamic parameters in node_params
-        Format: variable_name: node_name.variable_name
+        Supports two formats:
+        1. {{node_name.variable_name}} - Template format  
+        2. node_name.variable_name - Direct format
         """
         if not node_params:
             return {}
             
         resolved_params = {}
         
+        # First, extract {{}} format dynamic parameters
+        from ..utils import extract_dynamic_node_params
+        template_params = extract_dynamic_node_params(node_params)
+        
         for param_key, param_value in node_params.items():
-            if isinstance(param_value, str) and '.' in param_value:
-                # Check if this is a dynamic reference (node_name.variable_name)
-                try:
-                    parts = param_value.split('.', 1)
-                    if len(parts) == 2:
-                        referenced_node_name, variable_name = parts
-                        
-                        # Get the result data from the referenced node
-                        result_data = self.execution_output_crud.get_node_result_data(
-                            session, execution_id, referenced_node_name
-                        )
-                        
-                        if result_data and variable_name in result_data:
-                            resolved_params[param_key] = result_data[variable_name]
-                        else:
-                            # If reference not found, use original value
-                            resolved_params[param_key] = param_value
+            try:
+                # Check if this parameter has a template format {{}}
+                if param_key in template_params:
+                    # Use the extracted value (already cleaned from {{}})
+                    reference = template_params[param_key]
+                    resolved_value = self._resolve_single_reference(session, execution_id, reference)
+                    resolved_params[param_key] = resolved_value
+                    
+                # Check if this is a direct format (node_name.variable_name)
+                elif isinstance(param_value, str) and '.' in param_value:
+                    # Additional check: avoid treating simple filenames as dynamic references
+                    # Dynamic references should not contain common file extensions
+                    common_extensions = {'.txt', '.json', '.csv', '.xml', '.py', '.js', '.html', '.css', '.jpg', '.png', '.pdf'}
+                    is_dynamic = True
+                    
+                    # Check if it ends with a common file extension
+                    for ext in common_extensions:
+                        if param_value.lower().endswith(ext):
+                            is_dynamic = False
+                            break
+                    
+                    # Also check for URL patterns (http://, https://, ftp://)
+                    if param_value.startswith(('http://', 'https://', 'ftp://', 'file://')):
+                        is_dynamic = False
+                    
+                    # Also exclude paths that contain multiple dots (like version numbers)
+                    if param_value.count('.') > 1:
+                        is_dynamic = False
+                    
+                    if is_dynamic:
+                        resolved_value = self._resolve_single_reference(session, execution_id, param_value)
+                        resolved_params[param_key] = resolved_value
                     else:
-                        # Not a dynamic reference, use as-is
+                        # Treat as static parameter
                         resolved_params[param_key] = param_value
-                except Exception as e:
-                    # On any error, use original value
-                    print(f"[ORCHESTRATION] Error resolving parameter {param_key}: {e}")
+                        
+                else:
+                    # Static parameter (no template, no direct format)
                     resolved_params[param_key] = param_value
-            else:
-                # Static parameter, use as-is
+                    
+            except Exception as e:
+                # On any error, use original value
+                print(f"[ORCHESTRATION] Error resolving parameter {param_key}: {e}")
                 resolved_params[param_key] = param_value
                 
         return resolved_params
+    
+    def _resolve_single_reference(self, session: Session, execution_id: str, reference: str) -> Any:
+        """
+        Resolve a single dynamic reference (node_name.variable_name)
+        Returns the resolved value or original reference if not found
+        """
+        try:
+            from ..utils import split_variable_reference
+            referenced_node_name, variable_name = split_variable_reference(reference)
+            
+            # Get the result data from the referenced node
+            result_data = self.execution_output_crud.get_node_result_data(
+                session, execution_id, referenced_node_name
+            )
+            
+            if result_data and variable_name in result_data:
+                return result_data[variable_name]
+            else:
+                # If reference not found, return original reference
+                print(f"[ORCHESTRATION] Dynamic reference not found: {reference}")
+                return reference
+                
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error resolving reference {reference}: {e}")
+            return reference
 
     def process_execution_result(self, session: Session, result: Dict[str, Any]) -> bool:
         """
         Process single execution result
         1. Create execution_output record
-        2. Update dependency counts for dependent nodes
+        2. Update dependency counts for dependent nodes (if success)
         3. Update execution progress
-        4. Check for workflow completion
+        4. Handle failure by cancelling pending tasks (if failed)
+        5. Check for workflow completion
         """
         try:
             execution_id = result.get('execution_id')
@@ -947,9 +1063,20 @@ class DatabaseOrchestration:
             # Mark execution as running if it was pending
             self.execution_crud.mark_execution_running(session, execution_id)
             
-            # Update dependent tasks only if this node succeeded
+            # Handle success vs failure differently
             if status == 'success':
+                # Update dependent tasks only if this node succeeded
                 self._update_dependent_tasks(session, node_id, execution_id)
+                
+                # Check if this is the last node and collect final results
+                if self._is_last_node(session, node_id):
+                    print(f"[ORCHESTRATION] Last node {node_id} completed successfully, collecting final results")
+                    self._collect_final_results(session, execution_id)
+                    
+            else:
+                # Handle node failure - cancel all pending tasks
+                print(f"[ORCHESTRATION] Node {node_id} failed, cancelling remaining tasks in execution {execution_id}")
+                self._handle_node_failure(session, execution_id, node_id)
             
             # Check for workflow completion
             if self.execution_crud.check_execution_completion(session, execution_id):
@@ -959,6 +1086,105 @@ class DatabaseOrchestration:
             
         except Exception as e:
             print(f"[ORCHESTRATION] Error processing execution result: {e}")
+            return False
+
+    def _handle_node_failure(self, session: Session, execution_id: str, failed_node_id: str) -> int:
+        """
+        Handle node failure by cancelling all pending tasks in the execution
+        Returns number of cancelled tasks
+        """
+        try:
+            from .models import ExecutionOutputStatus
+            
+            # Get all remaining pending tasks for this execution
+            pending_tasks = self.execution_input_crud.get_execution_inputs_by_execution(session, execution_id)
+            
+            if not pending_tasks:
+                print(f"[ORCHESTRATION] No pending tasks to cancel for execution {execution_id}")
+                return 0
+            
+            # Get task IDs to cancel
+            task_ids_to_cancel = [task.id for task in pending_tasks]
+            
+            # Create CANCELLED outputs for all pending tasks
+            for task in pending_tasks:
+                # Create cancelled output record
+                self.execution_output_crud.create_execution_output(
+                    session=session,
+                    execution_id=execution_id,
+                    node_id=task.node_id,
+                    status=ExecutionOutputStatus.CANCELLED,
+                    result_data={'reason': f'Cancelled due to failure of node {failed_node_id}'},
+                    started_at=datetime.utcnow(),
+                    ended_at=datetime.utcnow()
+                )
+            
+            # Remove all pending tasks from execution_inputs
+            cancelled_count = self.execution_input_crud.bulk_delete_by_ids(session, task_ids_to_cancel)
+            
+            # Update execution pending_nodes count to 0 (since all remaining are cancelled)
+            self.execution_crud.update_execution_progress(
+                session=session,
+                execution_id=execution_id,
+                pending_nodes=0
+            )
+            
+            print(f"[ORCHESTRATION] Cancelled {cancelled_count} pending tasks due to node failure")
+            return cancelled_count
+            
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error handling node failure: {e}")
+            return 0
+
+    def _collect_final_results(self, session: Session, execution_id: str) -> Dict[str, Any]:
+        """
+        Collect final results when last node completes successfully
+        Updates execution.results with comprehensive final results
+        """
+        try:
+            # Use the enhanced combine method to get comprehensive results
+            final_results = self.__combine_execution_results(session, execution_id)
+            
+            # Update execution with final results  
+            execution = self.execution_crud.find_by_id(session, execution_id)
+            execution.results = final_results
+            execution.updated_at = datetime.utcnow()
+            session.flush()
+            
+            print(f"[ORCHESTRATION] Final results collected and saved for execution {execution_id}")
+            print(f"[ORCHESTRATION] Results summary: {final_results['summary']}")
+            
+            return final_results
+            
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error collecting final results: {e}")
+            return {}
+
+    def _is_last_node(self, session: Session, node_id: str) -> bool:
+        """
+        Check if a node is the last node (has no outgoing edges/downstream nodes)
+        Returns True if this is a terminal node
+        """
+        try:
+            # Check if this node has any outgoing edges
+            from .models import Edge
+            stmt = (
+                select(func.count(Edge.id))
+                .where(Edge.from_node_id == node_id)
+            )
+            
+            outgoing_edge_count = session.execute(stmt).scalar_one()
+            
+            # If no outgoing edges, it's a last node
+            is_last = outgoing_edge_count == 0
+            
+            if is_last:
+                print(f"[ORCHESTRATION] Node {node_id} is identified as a last node (no downstream dependencies)")
+            
+            return is_last
+            
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error checking if node is last: {e}")
             return False
 
     def _update_dependent_tasks(self, session: Session, completed_node_id: str, 

@@ -1,6 +1,8 @@
 import logging
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
+from datetime import datetime
 
 # Utility
 from .utils import setup_logging
@@ -140,7 +142,7 @@ class MiniflowCore:
             )
 
     def __stop_database_engine(self):
-       if self.db_engine:
+        if self.db_engine:
             try:
                 self.db_engine.stop()
             except Exception as e:
@@ -430,7 +432,81 @@ class MiniflowCore:
         
         logger.info(f"Executions listed successfully")
         return result
+
+    @ErrorManager.operation_context("execution_listing_by_workflow")
+    def execution_list_by_workflow(self, workflow_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> list:
+        """Get all executions for a specific workflow"""
+        ErrorManager.validate_engine_state(self.db_engine)
         
+        if not workflow_id:
+            raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
+        
+        with self.db_engine.get_session_context() as session:
+            executions = self.orchestration.execution_crud.get_executions_by_workflow(session, workflow_id)
+            
+            # Convert to list of dictionaries with consistent field names
+            result = []
+            for execution in executions:
+                exec_dict = {
+                    'execution_id': execution.id,  # Use execution_id for consistency
+                    'workflow_id': execution.workflow_id,
+                    'status': execution.status.value if hasattr(execution.status, 'value') else execution.status,
+                    'started_at': execution.started_at.isoformat() if execution.started_at else None,
+                    'ended_at': execution.ended_at.isoformat() if execution.ended_at else None,
+                    'created_at': execution.created_at.isoformat() if execution.created_at else None,
+                    'updated_at': execution.updated_at.isoformat() if execution.updated_at else None
+                }
+                result.append(exec_dict)
+        
+        logger.info(f"Retrieved {len(result)} executions for workflow {workflow_id}")
+        return result
+
+    # HEALTH CHECK METHOD
+    # ===========================================================
+    def health_check(self) -> dict:
+        """
+        System health check - returns status of all components
+        """
+        try:
+            components = {
+                "database": {
+                    "status": "healthy" if self.db_engine and self.db_engine.is_alive else "unhealthy",
+                    "details": "Database engine running" if self.db_engine and self.db_engine.is_alive else "Database engine not running"
+                },
+                "parallelism_engine": {
+                    "status": "healthy" if self.execution_engine and self.execution_engine.started else "unhealthy", 
+                    "details": "Execution engine running" if self.execution_engine and self.execution_engine.started else "Execution engine not running"
+                },
+                "scheduler": {
+                    "input_monitor": "healthy" if self.input_monitor and self.input_monitor.is_running() else "unhealthy",
+                    "output_monitor": "healthy" if self.output_monitor and self.output_monitor.is_running() else "unhealthy"
+                }
+            }
+            
+            # Overall status
+            all_healthy = (
+                components["database"]["status"] == "healthy" and
+                components["parallelism_engine"]["status"] == "healthy" and
+                (not self.enable_scheduler or (
+                    components["scheduler"]["input_monitor"] == "healthy" and
+                    components["scheduler"]["output_monitor"] == "healthy"
+                ))
+            )
+            
+            return {
+                "status": "healthy" if all_healthy else "unhealthy",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "components": components,
+                "ready_tasks": self._get_ready_task_count() if all_healthy else -1
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "timestamp": datetime.utcnow().isoformat() + "Z", 
+                "error": str(e),
+                "components": {}
+            }
         
     # API SERVER METHODS
     # ===========================================================
@@ -465,106 +541,8 @@ class MiniflowCore:
             ) from e
 
 
-    def health_check(self) -> dict:
-        """Check system health status"""
-        try:
-            health_status = {
-                "status": "healthy",
-                "components": {
-                    "database": "disconnected",
-                    "parallelism_engine": "stopped",
-                    "scheduler": {
-                        "enabled": self.enable_scheduler,
-                        "input_monitor": "stopped",
-                        "output_monitor": "stopped"
-                    }
-                },
-                "scripts_dir": "missing"
-            }
-            
-            # Check database
-            if self.db_engine:
-                try:
-                    with self.db_engine.get_session_context() as session:
-                        # Simple query to test connection
-                        pass
-                    health_status["components"]["database"] = "connected"
-                except:
-                    health_status["components"]["database"] = "error"
-                    health_status["status"] = "unhealthy"
-            else:
-                health_status["status"] = "unhealthy"
-            
-            # Check parallelism engine
-            if self.execution_engine and self.execution_engine.started:
-                health_status["components"]["parallelism_engine"] = "running"
-            elif self.execution_engine:
-                health_status["components"]["parallelism_engine"] = "stopped"
-                
-            # Check scheduler components
-            if self.enable_scheduler:
-                if self.input_monitor and self.input_monitor.is_running():
-                    health_status["components"]["scheduler"]["input_monitor"] = "running"
-                elif self.input_monitor:
-                    health_status["components"]["scheduler"]["input_monitor"] = "stopped"
-                    
-                if self.output_monitor and self.output_monitor.is_running():
-                    health_status["components"]["scheduler"]["output_monitor"] = "running"
-                elif self.output_monitor:
-                    health_status["components"]["scheduler"]["output_monitor"] = "stopped"
-            
-            # Check scripts directory
-            if self.scripts_dir.exists():
-                health_status["scripts_dir"] = "accessible"
-                
-            return health_status
-            
-        except Exception as e:
-            return {
-                "status": "unhealthy",
-                "error": str(e),
-                "components": {
-                    "database": "error",
-                    "parallelism_engine": "error",
-                    "scheduler": "error"
-                }
-            }
 
-    def get_system_status(self) -> dict:
-        """Get detailed system status information"""
-        status = {
-            "miniflow_core": {
-                "database_type": self.db_type,
-                "scheduler_enabled": self.enable_scheduler,
-                "scripts_directory": str(self.scripts_dir)
-            },
-            "components": {
-                "database_engine": {
-                    "running": self.db_engine is not None and self.db_engine.is_alive,
-                    "connection_info": self.db_engine.get_connection_info() if self.db_engine else None
-                },
-                "parallelism_engine": {
-                    "running": self.execution_engine is not None and self.execution_engine.started,
-                    "queue_status": {
-                        "input_queue_size": "unknown",  # Could be enhanced to get actual size
-                        "output_queue_size": "unknown"
-                    } if self.execution_engine else None
-                },
-                "scheduler": {
-                    "enabled": self.enable_scheduler,
-                    "input_monitor": {
-                        "running": self.input_monitor.is_running() if self.input_monitor else False,
-                        "status": "active" if (self.input_monitor and self.input_monitor.is_running()) else "inactive"
-                    } if self.enable_scheduler else None,
-                    "output_monitor": {
-                        "running": self.output_monitor.is_running() if self.output_monitor else False,
-                        "status": "active" if (self.output_monitor and self.output_monitor.is_running()) else "inactive"
-                    } if self.enable_scheduler else None
-                }
-            }
-        }
-        
-        return status
+
 
     # DEMONSTRATION AND TESTING METHODS
     # ===========================================================
