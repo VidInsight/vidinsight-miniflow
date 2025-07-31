@@ -100,6 +100,7 @@ from .engine import create_database_engine                     # Engine factory 
 # SQLAlchemy tabloları ve model tanımları
 # =============================================================================
 from .models import Base                                        # SQLAlchemy declarative base
+from .models import EnvironmentVariable                        # Environment variables model
 
 # =============================================================================
 # ORCHESTRATION COMPONENTS
@@ -126,6 +127,7 @@ __all__ = [
     
     # Model exports
     "Base",
+    "EnvironmentVariable",
     
     # Orchestration exports
     "DatabaseOrchestration"

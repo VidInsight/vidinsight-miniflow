@@ -7,7 +7,7 @@ from .crud import (
     WorkflowCRUD, NodeCRUD, EdgeCRUD, TriggerCRUD, 
     ScriptCRUD, ExecutionCRUD,ExecutionInputCRUD, 
     ExecutionOutputCRUD, ArchivedExecutionCRUD,
-    AuditLogCRUD
+    AuditLogCRUD, EnvironmentVariableCRUD
 )
 from .models import (
     Workflow, Node, Edge, Trigger, Script, Execution, 
@@ -15,7 +15,9 @@ from .models import (
     WorkflowStatus, ExecutionStatus, TriggerType, ConditionType, AuditAction
 )
 from ..exceptions import ValidationError, BusinessLogicError
-from ..utils import extract_dynamic_node_params,  split_variable_reference
+from ..utils import extract_dynamic_node_params, extract_environment_variables, split_variable_reference
+from ..utils import format_timestamp_fields, current_timestamp
+from .audit_decorators import audit_and_validate_create, audit_update, audit_delete, validate_name_unique
 
 class DatabaseOrchestration:
     def __init__(self):
@@ -29,31 +31,67 @@ class DatabaseOrchestration:
         self.execution_output_crud = ExecutionOutputCRUD()
         self.archived_execution_crud = ArchivedExecutionCRUD()
         self.audit_log_crud = AuditLogCRUD()
+        self.environment_variable_crud = EnvironmentVariableCRUD()
 
+    """
+    VERİTABANI CRUD INTERDACE METOTLARI
+    ==============================================================
+    Bu metotlar, veri tabanı yapısı için özel CRUD operayonlarını yöneten fonksiyonları kullanarak
+    daha komplike işlemleri yapabilmek için tasarlanmıştır.
+    """
 
-    # WORKFLOW FUNCTIONS
+    # SCRIPT FUNCTIONS - OPTIMIZED WITH DECORATORS
     # ==============================================================
+    @audit_and_validate_create("script", "script_crud", "Script")
+    def __script_create(self, session: Session, **script_data):
+        """OPTIMIZED: Eliminated name validation + audit logging boilerplate (5 lines → 1 decorator)"""
+        return self.script_crud.create(session, **script_data)
+
+    @audit_delete("script")
+    def __script_delete(self, session: Session, script_id):
+        """OPTIMIZED: Eliminated audit logging boilerplate (6 lines → 1 decorator)"""
+        # 1. Script'i bul
+        old_script = self.script_crud.find_by_id(session, script_id)
+
+        # 2. Script'in kullanıldığı node'ları kontrol et
+        nodes_using_script = self.node_crud.get_nodes_by_script(session, script_id)
+        if nodes_using_script:
+            node_names = [node.name for node in nodes_using_script]
+            raise BusinessLogicError(f"Cannot delete script '{old_script.name}' - it is used by nodes: {', '.join(node_names)}")
+        
+        # 3. Script'i sil
+        self.script_crud.delete(session, script_id)
+
+        # 4. Return deleted script (audit decorator will handle logging)
+        return old_script
+
+    @audit_update("script")
+    def __script_update(self, session: Session, script_id, **script_data):
+        """OPTIMIZED: Eliminated audit logging boilerplate (8 lines → 1 decorator)"""
+        # 1. Eski değerleri al
+        old_script = self.script_crud.find_by_id(session, script_id)
+
+        # 2. İsim değişikliği varsa kontrol et
+        if 'name' in script_data and script_data['name'] != old_script.name:
+            if self.script_crud.check_name_exists(session, script_data['name']):
+                raise ValidationError(f"Script with name '{script_data['name']}' already exists")
+        
+        # 3. Script'i güncelle
+        updated_script = self.script_crud.update(session, script_id, **script_data)
+
+        # 4. Return old and new for audit decorator
+        return old_script, updated_script
+    
+    # WORKFLOW FUNCTIONS - OPTIMIZED WITH DECORATORS
+    # ==============================================================
+    @audit_and_validate_create("workflow", "workflow_crud", "Workflow")
     def __workflow_create(self, session: Session, **workflow_data):
-        # 1. Aynı isimli bir workflow var mı kontrol et
-        if self.workflow_crud.check_name_exists(session, workflow_data['name']):
-            raise ValidationError(f"Workflow with name '{workflow_data.get('name')}' already exists")
+        """OPTIMIZED: Eliminated name validation + audit logging boilerplate (12 lines → 1 decorator)"""
+        return self.workflow_crud.create(session, **workflow_data)
 
-        # 2. Workflow oluştur
-        workflow = self.workflow_crud.create(session, **workflow_data)
-
-        # 3. Audit Log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="workflow",
-            record_id=workflow.id,
-            action=AuditAction.CREATE,
-            new_values=workflow.to_dict()
-        )
-
-        # 4. Oluşan workflow'u döndür
-        return workflow
-
+    @audit_delete("workflow")
     def __workflow_delete(self, session: Session, workflow_id):
+        """OPTIMIZED: Eliminated audit logging boilerplate (8 lines → 1 decorator)"""
         # 1. Workflow'u bul
         old_workflow = self.workflow_crud.find_by_id(session, workflow_id)
 
@@ -79,44 +117,27 @@ class DatabaseOrchestration:
             self.__node_delete(session, node.id)
         
         # 4. Workflow'u sil
-        result = self.workflow_crud.delete(session, workflow_id)
+        self.workflow_crud.delete(session, workflow_id)
 
-        # 5. Audit log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="workflow",
-            record_id=old_workflow.id,
-            action=AuditAction.DELETE,
-            old_values=old_workflow.to_dict()
-        )
-
-        # 6. Silinen workflow'u döndür
+        # 5. Return deleted workflow (audit decorator will handle logging)
         return old_workflow
 
+    @audit_update("workflow")
     def __workflow_update(self, session: Session, workflow_id, **workflow_data):
+        """OPTIMIZED: Eliminated audit logging boilerplate (8 lines → 1 decorator)"""
         # 1. Eski değerleri al
         old_workflow = self.workflow_crud.find_by_id(session, workflow_id)
 
         # 2. İsim değişikliği varsa kontrol et
-        if workflow_data['name'] != old_workflow.name:
+        if 'name' in workflow_data and workflow_data['name'] != old_workflow.name:
             if self.workflow_crud.check_name_exists(session, workflow_data['name']):
                 raise ValidationError(f"Workflow with name '{workflow_data['name']}' already exists")
         
         # 3. Workflow'u güncelle
         updated_workflow = self.workflow_crud.update(session, workflow_id, **workflow_data)
 
-        # 4. Audit Log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name='workflow',
-            record_id=updated_workflow.id,
-            action=AuditAction.UPDATE,
-            old_values=old_workflow.to_dict(),
-            new_values=updated_workflow.to_dict()
-        )
-
-        # 5. Updated workflow'u döndür
-        return updated_workflow
+        # 4. Return old and new for audit decorator
+        return old_workflow, updated_workflow
 
     # NODE FUNCTIONS
     # ==============================================================
@@ -340,79 +361,367 @@ class DatabaseOrchestration:
         # 4. Updated trigger'ı döndür
         return updated_trigger
 
-    # SCRIPT FUNCTIONS
+    #  EXECUTION FUNCTIONS
     # ==============================================================
-    def __script_create(self, session: Session, **script_data):
-        # 1. Aynı isimli bir script var mı kontrol et
-        if self.script_crud.check_name_exists(session, script_data['name']):
-            raise ValidationError(f"Script with name '{script_data.get('name')}' already exists")
-
-        # 2. Script oluştur
-        script = self.script_crud.create(session, **script_data)
-
-        # 3. Audit Log ekle
+    def __execution_create(self, session: Session, **execution_data):
+        execution = self.execution_crud.create(session, **execution_data)
+        
         self.audit_log_crud.log_action(
             session=session,
-            table_name="script",
-            record_id=script.id,
+            table_name="execution",
+            record_id=execution.id,
             action=AuditAction.CREATE,
-            new_values=script.to_dict()
+            new_values=execution.to_dict()
         )
 
-        # 4. Oluşan script'i döndür
-        return script
+        return execution
 
-    def __script_update(self, session: Session, script_id, **script_data):
-        # 1. Eski değerleri al
-        old_script = self.script_crud.find_by_id(session, script_id)
+    def __execution_update(self, session: Session, execution_id, **execution_data):
+        pass
 
-        # 2. İsim değişikliği varsa kontrol et
-        if 'name' in script_data and script_data['name'] != old_script.name:
-            if self.script_crud.check_name_exists(session, script_data['name']):
-                raise ValidationError(f"Script with name '{script_data['name']}' already exists")
-        
-        # 3. Script'i güncelle
-        updated_script = self.script_crud.update(session, script_id, **script_data)
-
-        # 4. Audit Log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name='script',
-            record_id=updated_script.id,
-            action=AuditAction.UPDATE,
-            old_values=old_script.to_dict(),
-            new_values=updated_script.to_dict()
-        )
-
-        # 5. Updated script'i döndür
-        return updated_script
-
-    def __script_delete(self, session: Session, script_id):
-        # 1. Script'i bul
-        old_script = self.script_crud.find_by_id(session, script_id)
-
-        # 2. Script'in kullanıldığı node'ları kontrol et
-        nodes_using_script = self.node_crud.get_nodes_by_script(session, script_id)
-        if nodes_using_script:
-            node_names = [node.name for node in nodes_using_script]
-            raise BusinessLogicError(f"Cannot delete script '{old_script.name}' - it is used by nodes: {', '.join(node_names)}")
-        
-        # 3. Script'i sil
-        result = self.script_crud.delete(session, script_id)
-
-        # 4. Audit log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="script",
-            record_id=old_script.id,
-            action=AuditAction.DELETE,
-            old_values=old_script.to_dict()
-        )
-
-        # 5. Silinen script'i döndür
-        return old_script
-
+    def __execution_delete(self, session: Session, execution_id):
+        pass
+    
+    #  EXECUTION INPUTS FUNCTIONS
     # ==============================================================
+    def __execution_input_create(self, session: Session, **execution_input_data):
+        """
+        Execution input oluştur
+        """
+        execution_input = self.execution_input_crud.create(session, **execution_input_data)
+        
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="execution_input",
+            record_id=execution_input.id,
+            action=AuditAction.CREATE,
+            new_values=execution_input.to_dict()
+        )       
+
+        return execution_input
+    
+    def __execution_input_update(self, session: Session, execution_input_id: str, **execution_input_data):
+        pass
+
+    def __execution_input_delete(self, session: Session, execution_input_id: str):
+        deleted_input = self.execution_input_crud.delete(session, execution_input_id)
+        
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="execution_input",
+            record_id=deleted_input.id,
+            action=AuditAction.DELETE,
+            old_values=deleted_input.to_dict()
+        )
+
+        return deleted_input
+
+    #  EXECUTION OUTPUTS FUNCTIONS
+    # ==============================================================
+    def __execution_output_create(self, session: Session, **execution_output_data):
+        """
+        Execution output oluştur
+        """
+        execution_output = self.execution_output_crud.create(session, **execution_output_data)
+        
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="execution_output",
+            record_id=execution_output.id,
+            action=AuditAction.CREATE,
+            new_values=execution_output.to_dict()
+        )
+
+        return execution_output
+
+    def __execution_output_update(self, session: Session, execution_output_id: str, **execution_output_data):
+        pass
+
+    def __execution_output_delete(self, session: Session, execution_output_id: str):
+        pass
+
+
+    """
+    END-TO-END METOTLAR
+    ==============================================================
+    Bu metotlar, Miniflow'un veri tabanı yapısı için bir high level interface sağlar.
+    Yukarıda bulunan tablolarla özel CRUD operayonlarını yöneten fonksiyonları kullanarak
+    daha komplike işlemleri yapabilmek için tasarlanmıştır.
+    """
+
+    # END-TO-END SCRIPT FUNCTIONS
+    # ==============================================================
+    def create_script(self, session: Session, script_data: dict):
+        """
+        Yeni script oluştur
+        """
+        script = self.__script_create(session, **script_data)
+        
+        api_payload = {
+            'script_id': script.id,
+            'absolute_path': script.script_path,
+        }
+        # OPTIMIZED: Use centralized datetime formatting
+        api_payload.update(format_timestamp_fields(script, ['created_at']))
+
+        return api_payload
+
+    def delete_script(self, session: Session, script_id: str):
+        """
+        Script'i sil - Usage kontrolü ile
+        """
+        deleted_script = self.__script_delete(session, script_id)
+        
+        api_payload = {
+            'script_id': deleted_script.id,
+            'script_name': deleted_script.name,
+        }
+
+        return api_payload
+
+    def get_scripts(self, session: Session):
+        """
+        Tüm script'leri listele
+        """
+        scripts = self.script_crud.get_all(session)
+        script_list = []
+        for script in scripts:
+            script_dict = script.to_dict()
+            script_dict['script_id'] = script_dict['id']  # Add consistent field name
+            script_list.append(script_dict)
+
+        return script_list
+
+    def get_script(self, session: Session, script_id: str, include_content: bool = False):
+        """
+        Script detayını getir
+        """
+        # 1. Script'i bul
+        script = self.script_crud.find_by_id(session, script_id)
+        if not script:
+            raise BusinessLogicError(f"Script not found: {script_id}")
+        
+        script_dict = script.to_dict()
+        
+        # 2. Add consistent field name for API compatibility
+        script_dict['script_id'] = script_dict['id']
+        
+        # 3. Eğer content isteniyorsa, dosyadan oku
+        if include_content and script.script_path:
+            try:
+                with open(script.script_path, 'r') as f:
+                    script_dict['file_content'] = f.read()
+            except Exception as e:
+                script_dict['file_content'] = f"Error reading file: {str(e)}"
+        
+        return script_dict
+    
+
+    # END-TO-END ENVIRONMENT VARIABLE FUNCTIONS
+    # ==============================================================
+    def create_environment_variable(self, session: Session, env_var_data: dict):
+        """
+        Yeni environment variable oluştur
+        """
+        # Aynı isimli bir environment variable var mı kontrol et
+        if self.environment_variable_crud.check_name_exists(session, env_var_data['name']):
+            raise ValidationError(f"Environment variable with name '{env_var_data.get('name')}' already exists")
+
+        # Environment variable oluştur
+        env_var = self.environment_variable_crud.create(session, **env_var_data)
+
+        # Audit Log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="environment_variable",
+            record_id=env_var.id,
+            action=AuditAction.CREATE,
+            new_values=env_var.to_dict()
+        )
+
+        api_payload = {
+            'env_var_id': env_var.id,
+            'name': env_var.name,
+            'value': env_var.value,
+            'is_active': env_var.is_active,
+            'created_at': env_var.created_at.isoformat() if env_var.created_at else None
+        }
+
+        return api_payload
+
+    def delete_environment_variable(self, session: Session, env_var_id: str):
+        """
+        Environment variable'ı sil
+        """
+        # Environment variable'ı bul
+        old_env_var = self.environment_variable_crud.find_by_id(session, env_var_id)
+        if not old_env_var:
+            raise BusinessLogicError(f"Environment variable not found: {env_var_id}")
+        
+        # Environment variable'ı sil
+        result = self.environment_variable_crud.delete(session, env_var_id)
+
+        # Audit log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name="environment_variable",
+            record_id=old_env_var.id,
+            action=AuditAction.DELETE,
+            old_values=old_env_var.to_dict()
+        )
+
+        api_payload = {
+            'env_var_id': old_env_var.id,
+            'name': old_env_var.name,
+        }
+
+        return api_payload
+
+    def update_environment_variable(self, session: Session, env_var_id: str, **env_var_data):
+        """
+        Environment variable'ı güncelle
+        """
+        # Eski değerleri al
+        old_env_var = self.environment_variable_crud.find_by_id(session, env_var_id)
+        if not old_env_var:
+            raise BusinessLogicError(f"Environment variable not found: {env_var_id}")
+
+        # İsim değişikliği varsa kontrol et
+        if 'name' in env_var_data and env_var_data['name'] != old_env_var.name:
+            if self.environment_variable_crud.check_name_exists(session, env_var_data['name']):
+                raise ValidationError(f"Environment variable with name '{env_var_data['name']}' already exists")
+        
+        # Environment variable'ı güncelle
+        updated_env_var = self.environment_variable_crud.update(session, env_var_id, **env_var_data)
+
+        # Audit Log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name='environment_variable',
+            record_id=updated_env_var.id,
+            action=AuditAction.UPDATE,
+            old_values=old_env_var.to_dict(),
+            new_values=updated_env_var.to_dict()
+        )
+
+        api_payload = {
+            'env_var_id': updated_env_var.id,
+            'name': updated_env_var.name,
+            'value': updated_env_var.value,
+            'is_active': updated_env_var.is_active,
+            'updated_at': updated_env_var.updated_at.isoformat() if updated_env_var.updated_at else None
+        }
+
+        return api_payload
+
+    def get_environment_variables(self, session: Session, active_only: bool = False):
+        """
+        Tüm environment variable'ları listele
+        """
+        if active_only:
+            env_vars = self.environment_variable_crud.get_active_variables(session)
+        else:
+            env_vars = self.environment_variable_crud.get_all(session)
+        
+        env_var_list = []
+        for env_var in env_vars:
+            env_var_dict = env_var.to_dict()
+            env_var_dict['env_var_id'] = env_var_dict['id']  # Add consistent field name
+            env_var_list.append(env_var_dict)
+
+        return env_var_list
+
+    def get_environment_variable(self, session: Session, env_var_id: str):
+        """
+        Environment variable detayını getir
+        """
+        # Environment variable'ı bul
+        env_var = self.environment_variable_crud.find_by_id(session, env_var_id)
+        if not env_var:
+            raise BusinessLogicError(f"Environment variable not found: {env_var_id}")
+        
+        env_var_dict = env_var.to_dict()
+        
+        # Add consistent field name for API compatibility
+        env_var_dict['env_var_id'] = env_var_dict['id']
+        
+        return env_var_dict
+
+    def get_environment_variable_by_name(self, session: Session, name: str):
+        """
+        Environment variable'ı isimle getir
+        """
+        # Environment variable'ı bul
+        env_var = self.environment_variable_crud.find_by_name(session, name)
+        if not env_var:
+            raise BusinessLogicError(f"Environment variable not found: {name}")
+        
+        env_var_dict = env_var.to_dict()
+        
+        # Add consistent field name for API compatibility
+        env_var_dict['env_var_id'] = env_var_dict['id']
+        
+        return env_var_dict
+
+    def activate_environment_variable(self, session: Session, env_var_id: str):
+        """
+        Environment variable'ı aktif hale getir
+        """
+        env_var = self.environment_variable_crud.find_by_id(session, env_var_id)
+        if not env_var:
+            raise BusinessLogicError(f"Environment variable not found: {env_var_id}")
+
+        old_values = env_var.to_dict()
+        
+        # Aktif hale getir
+        updated_env_var = self.environment_variable_crud.activate_variable(session, env_var.name)
+
+        # Audit Log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name='environment_variable',
+            record_id=updated_env_var.id,
+            action=AuditAction.UPDATE,
+            old_values=old_values,
+            new_values=updated_env_var.to_dict()
+        )
+
+        return {
+            'env_var_id': updated_env_var.id,
+            'name': updated_env_var.name,
+            'is_active': updated_env_var.is_active
+        }
+
+    def deactivate_environment_variable(self, session: Session, env_var_id: str):
+        """
+        Environment variable'ı deaktif hale getir
+        """
+        env_var = self.environment_variable_crud.find_by_id(session, env_var_id)
+        if not env_var:
+            raise BusinessLogicError(f"Environment variable not found: {env_var_id}")
+
+        old_values = env_var.to_dict()
+        
+        # Deaktif hale getir
+        updated_env_var = self.environment_variable_crud.deactivate_variable(session, env_var.name)
+
+        # Audit Log ekle
+        self.audit_log_crud.log_action(
+            session=session,
+            table_name='environment_variable',
+            record_id=updated_env_var.id,
+            action=AuditAction.UPDATE,
+            old_values=old_values,
+            new_values=updated_env_var.to_dict()
+        )
+
+        return {
+            'env_var_id': updated_env_var.id,
+            'name': updated_env_var.name,
+            'is_active': updated_env_var.is_active
+        }
+
+
     # END-TO-END WORKFLOW FUNCTIONS
     # ==============================================================
     def create_workflow(self, session: Session, workflow_data: dict):
@@ -555,209 +864,8 @@ class DatabaseOrchestration:
         
         return workflow_dict
 
-    # END-TO-END SCRIPT FUNCTIONS
-    # ==============================================================
-    def create_script(self, session: Session, script_data: dict):
-        """
-        Yeni script oluştur
-        """
-        script = self.__script_create(session, **script_data)
-        
-        api_payload = {
-            'script_id': script.id,
-            'absolute_path': script.script_path,
-            'created_at': script.created_at.isoformat() if script.created_at else None
-        }
-
-        return api_payload
-
-    def delete_script(self, session: Session, script_id: str):
-        """
-        Script'i sil - Usage kontrolü ile
-        """
-        deleted_script = self.__script_delete(session, script_id)
-        
-        api_payload = {
-            'script_id': deleted_script.id,
-            'script_name': deleted_script.name,
-        }
-
-        return api_payload
-
-    def get_scripts(self, session: Session):
-        """
-        Tüm script'leri listele
-        """
-        scripts = self.script_crud.get_all(session)
-        script_list = []
-        for script in scripts:
-            script_dict = script.to_dict()
-            script_dict['script_id'] = script_dict['id']  # Add consistent field name
-            script_list.append(script_dict)
-
-        return script_list
-
-    def get_script(self, session: Session, script_id: str, include_content: bool = False):
-        """
-        Script detayını getir
-        """
-        # 1. Script'i bul
-        script = self.script_crud.find_by_id(session, script_id)
-        if not script:
-            raise BusinessLogicError(f"Script not found: {script_id}")
-        
-        script_dict = script.to_dict()
-        
-        # 2. Add consistent field name for API compatibility
-        script_dict['script_id'] = script_dict['id']
-        
-        # 3. Eğer content isteniyorsa, dosyadan oku
-        if include_content and script.script_path:
-            try:
-                with open(script.script_path, 'r') as f:
-                    script_dict['file_content'] = f.read()
-            except Exception as e:
-                script_dict['file_content'] = f"Error reading file: {str(e)}"
-        
-        return script_dict
+   
     
-
-    #  EXECUTION FUNCTIONS
-    # ==============================================================
-    def __execution_create(self, session: Session, **execution_data):
-        """
-        Execution oluştur
-        """
-        execution = self.execution_crud.create(session, **execution_data)
-        
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="execution",
-            record_id=execution.id,
-            action=AuditAction.CREATE,
-            new_values=execution.to_dict()
-        )
-
-        return execution
-    
-    #  EXECUTION INPUTS FUNCTIONS
-    # ==============================================================
-    def __execution_input_create(self, session: Session, **execution_input_data):
-        """
-        Execution input oluştur
-        """
-        execution_input = self.execution_input_crud.create(session, **execution_input_data)
-        
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="execution_input",
-            record_id=execution_input.id,
-            action=AuditAction.CREATE,
-            new_values=execution_input.to_dict()
-        )       
-
-        return execution_input
-    
-    def __execution_input_delete(self, session: Session, execution_input_id: str):
-        deleted_input = self.execution_input_crud.delete(session, execution_input_id)
-        
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="execution_input",
-            record_id=deleted_input.id,
-            action=AuditAction.DELETE,
-            old_values=deleted_input.to_dict()
-        )
-
-        return deleted_input
-
-    #  EXECUTION OUTPUTS FUNCTIONS
-    # ==============================================================
-    def __execution_output_create(self, session: Session, **execution_output_data):
-        """
-        Execution output oluştur
-        """
-        execution_output = self.execution_output_crud.create(session, **execution_output_data)
-        
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="execution_output",
-            record_id=execution_output.id,
-            action=AuditAction.CREATE,
-            new_values=execution_output.to_dict()
-        )
-
-        return execution_output
-
-    def __combine_execution_results(self, session: Session, execution_id: str) -> Dict[str, Any]:
-        """
-        Combine all execution results into a single comprehensive file
-        Returns complete execution summary with all node results
-        """
-        # Get execution details
-        execution = self.execution_crud.find_by_id(session, execution_id)
-        
-        # Get all execution outputs
-        execution_outputs = self.execution_output_crud.get_execution_outputs_by_execution(session, execution_id)
-        
-        # Get execution progress statistics
-        progress = self.execution_output_crud.get_execution_progress(session, execution_id)
-        
-        # Build comprehensive results
-        combined_results = {
-            'execution_id': execution_id,
-            'workflow_id': execution.workflow_id,
-            'execution_status': execution.status.value,
-            'started_at': execution.started_at.isoformat() if execution.started_at else None,
-            'ended_at': execution.ended_at.isoformat() if execution.ended_at else None,
-            'total_duration_seconds': (
-                (execution.ended_at - execution.started_at).total_seconds() 
-                if execution.ended_at and execution.started_at else None
-            ),
-            'summary': {
-                'total_nodes': progress['total'],
-                'successful_nodes': progress['success'], 
-                'failed_nodes': progress['failure'],
-                'cancelled_nodes': progress['cancelled'],
-                'timeout_nodes': progress['timeout'],
-                'success_rate': (
-                    (progress['success'] / progress['total'] * 100) 
-                    if progress['total'] > 0 else 0
-                )
-            },
-            'node_results': {}
-        }
-        
-        # Add detailed node results
-        for output in execution_outputs:
-            # Get node details
-            node = self.node_crud.find_by_id(session, output.node_id)
-            
-            node_result = {
-                'node_id': output.node_id,
-                'node_name': node.name if node else 'unknown',
-                'status': output.status.value,
-                'result_data': output.result_data or {},
-                'started_at': output.started_at.isoformat() if output.started_at else None,
-                'ended_at': output.ended_at.isoformat() if output.ended_at else None,
-                'duration_seconds': (
-                    (output.ended_at - output.started_at).total_seconds()
-                    if output.ended_at and output.started_at else None
-                )
-            }
-            
-            combined_results['node_results'][node.name if node else output.node_id] = node_result
-        
-        # Add metadata
-        combined_results['metadata'] = {
-            'generated_at': datetime.utcnow().isoformat(),
-            'total_execution_time': combined_results['total_duration_seconds'],
-            'file_format_version': '1.0'
-        }
-        
-        return combined_results
-
-
     # END-TO-END EXECUTION FUNCTIONS
     # ==============================================================
     def trigger_workflow(self, session: Session, workflow_id: str):
@@ -887,10 +995,12 @@ class DatabaseOrchestration:
     def create_task_payload(self, session: Session, task: Dict[str, Any]) -> Dict[str, Any]:
         """
         Create execution payload for parallelism engine
-        1. Extract dynamic node params
-        2. Split variable references  
-        3. Get execution results from output table
-        4. Build complete execution context
+        1. Extract dynamic node params using template format {{node_name.variable_name}}
+        2. Extract environment variables using format {{$variable_name}}
+        3. Split variable references  
+        4. Get execution results from output table
+        5. Get environment variables from database
+        6. Build complete execution context
         """
         try:
             # Extract basic task information
@@ -930,57 +1040,36 @@ class DatabaseOrchestration:
         """
         Resolve dynamic parameters in node_params
         Supports two formats:
-        1. {{node_name.variable_name}} - Template format  
-        2. node_name.variable_name - Direct format
+        1. {{node_name.variable_name}} - Template format for node outputs
+        2. {{$variable_name}} - Environment variable format
         """
         if not node_params:
             return {}
             
         resolved_params = {}
         
-        # First, extract {{}} format dynamic parameters
-        from ..utils import extract_dynamic_node_params
+        # Extract {{}} format dynamic parameters and {{$}} environment variables
         template_params = extract_dynamic_node_params(node_params)
+        env_vars = extract_environment_variables(node_params)
         
         for param_key, param_value in node_params.items():
             try:
-                # Check if this parameter has a template format {{}}
+                # Check if this parameter has a template format {{node_name.variable_name}}
                 if param_key in template_params:
                     # Use the extracted value (already cleaned from {{}})
                     reference = template_params[param_key]
                     resolved_value = self._resolve_single_reference(session, execution_id, reference)
                     resolved_params[param_key] = resolved_value
                     
-                # Check if this is a direct format (node_name.variable_name)
-                elif isinstance(param_value, str) and '.' in param_value:
-                    # Additional check: avoid treating simple filenames as dynamic references
-                    # Dynamic references should not contain common file extensions
-                    common_extensions = {'.txt', '.json', '.csv', '.xml', '.py', '.js', '.html', '.css', '.jpg', '.png', '.pdf'}
-                    is_dynamic = True
+                # Check if this parameter has an environment variable {{$variable_name}}
+                elif param_key in env_vars:
+                    # Use the extracted environment variable name
+                    env_var_name = env_vars[param_key]
+                    resolved_value = self._resolve_environment_variable(session, env_var_name)
+                    resolved_params[param_key] = resolved_value
                     
-                    # Check if it ends with a common file extension
-                    for ext in common_extensions:
-                        if param_value.lower().endswith(ext):
-                            is_dynamic = False
-                            break
-                    
-                    # Also check for URL patterns (http://, https://, ftp://)
-                    if param_value.startswith(('http://', 'https://', 'ftp://', 'file://')):
-                        is_dynamic = False
-                    
-                    # Also exclude paths that contain multiple dots (like version numbers)
-                    if param_value.count('.') > 1:
-                        is_dynamic = False
-                    
-                    if is_dynamic:
-                        resolved_value = self._resolve_single_reference(session, execution_id, param_value)
-                        resolved_params[param_key] = resolved_value
-                    else:
-                        # Treat as static parameter
-                        resolved_params[param_key] = param_value
-                        
                 else:
-                    # Static parameter (no template, no direct format)
+                    # Static parameter (no template format, no environment variable)
                     resolved_params[param_key] = param_value
                     
             except Exception as e:
@@ -992,11 +1081,10 @@ class DatabaseOrchestration:
     
     def _resolve_single_reference(self, session: Session, execution_id: str, reference: str) -> Any:
         """
-        Resolve a single dynamic reference (node_name.variable_name)
+        Resolve a single dynamic reference from template format (extracted from {{node_name.variable_name}})
         Returns the resolved value or original reference if not found
         """
         try:
-            from ..utils import split_variable_reference
             referenced_node_name, variable_name = split_variable_reference(reference)
             
             # Get the result data from the referenced node
@@ -1007,13 +1095,33 @@ class DatabaseOrchestration:
             if result_data and variable_name in result_data:
                 return result_data[variable_name]
             else:
-                # If reference not found, return original reference
+                # If reference not found, return original template format for later resolution
                 print(f"[ORCHESTRATION] Dynamic reference not found: {reference}")
-                return reference
+                return f"{{{{{reference}}}}}"  # Return original template format
                 
         except Exception as e:
             print(f"[ORCHESTRATION] Error resolving reference {reference}: {e}")
-            return reference
+            return f"{{{{{reference}}}}}"  # Return original template format on error
+
+    def _resolve_environment_variable(self, session: Session, env_var_name: str) -> Any:
+        """
+        Resolve an environment variable from database
+        Returns the resolved value or original reference if not found
+        """
+        try:
+            # Get the environment variable value from database
+            env_value = self.environment_variable_crud.get_variable_value(session, env_var_name)
+            
+            if env_value is not None:
+                return env_value
+            else:
+                # If environment variable not found, return original reference with $ prefix
+                print(f"[ORCHESTRATION] Environment variable not found: {env_var_name}")
+                return f"{{${env_var_name}}}"  # Return original format
+                
+        except Exception as e:
+            print(f"[ORCHESTRATION] Error resolving environment variable {env_var_name}: {e}")
+            return f"{{${env_var_name}}}"  # Return original template format on error
 
     def process_execution_result(self, session: Session, result: Dict[str, Any]) -> bool:
         """
@@ -1267,3 +1375,71 @@ class DatabaseOrchestration:
             'failure': failure_count,
             'total': len(results)
         }
+    
+    def __combine_execution_results(self, session: Session, execution_id: str) -> Dict[str, Any]:
+        """
+        Combine all execution results into a single comprehensive file
+        Returns complete execution summary with all node results
+        """
+        # Get execution details
+        execution = self.execution_crud.find_by_id(session, execution_id)
+        
+        # Get all execution outputs
+        execution_outputs = self.execution_output_crud.get_execution_outputs_by_execution(session, execution_id)
+        
+        # Get execution progress statistics
+        progress = self.execution_output_crud.get_execution_progress(session, execution_id)
+        
+        # Build comprehensive results
+        combined_results = {
+            'execution_id': execution_id,
+            'workflow_id': execution.workflow_id,
+            'execution_status': execution.status.value,
+            'started_at': execution.started_at.isoformat() if execution.started_at else None,
+            'ended_at': execution.ended_at.isoformat() if execution.ended_at else None,
+            'total_duration_seconds': (
+                (execution.ended_at - execution.started_at).total_seconds() 
+                if execution.ended_at and execution.started_at else None
+            ),
+            'summary': {
+                'total_nodes': progress['total'],
+                'successful_nodes': progress['success'], 
+                'failed_nodes': progress['failure'],
+                'cancelled_nodes': progress['cancelled'],
+                'timeout_nodes': progress['timeout'],
+                'success_rate': (
+                    (progress['success'] / progress['total'] * 100) 
+                    if progress['total'] > 0 else 0
+                )
+            },
+            'node_results': {}
+        }
+        
+        # Add detailed node results
+        for output in execution_outputs:
+            # Get node details
+            node = self.node_crud.find_by_id(session, output.node_id)
+            
+            node_result = {
+                'node_id': output.node_id,
+                'node_name': node.name if node else 'unknown',
+                'status': output.status.value,
+                'result_data': output.result_data or {},
+                'started_at': output.started_at.isoformat() if output.started_at else None,
+                'ended_at': output.ended_at.isoformat() if output.ended_at else None,
+                'duration_seconds': (
+                    (output.ended_at - output.started_at).total_seconds()
+                    if output.ended_at and output.started_at else None
+                )
+            }
+            
+            combined_results['node_results'][node.name if node else output.node_id] = node_result
+        
+        # Add metadata
+        combined_results['metadata'] = {
+            'generated_at': datetime.utcnow().isoformat(),
+            'total_execution_time': combined_results['total_duration_seconds'],
+            'file_format_version': '1.0'
+        }
+        
+        return combined_results

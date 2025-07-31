@@ -8,8 +8,8 @@ from multiprocessing import cpu_count, Pipe
 
 
 class ProcessController:
-    def __init__(self, output_queue, os: bool):
-        self.output_queue = output_queue
+    def __init__(self, input_queue, output_queue, os: bool):
+        self.input_queue = input_queue
         self.output_queue = output_queue
         self.max_cpu_count = cpu_count() - 1
         self.min_process_count = 2
@@ -63,37 +63,67 @@ class ProcessController:
 
     def _get_next_process(self):
         """Select the process with the lowest thread count"""
-        if not self.active_processes or None in self.thread_count_list:
+        # Basic validation - check if we have active processes
+        if not self.active_processes:
             return None
-
-        thread_count_list = self.thread_count_list
-
-        if sum(thread_count_list) >= self.thread_lock_limit:
+            
+        # Filter out None values from thread count list and ensure it's not empty
+        valid_thread_counts = [count for count in self.thread_count_list if count is not None]
+        
+        # If no valid thread counts available, use round-robin fallback
+        if not valid_thread_counts or len(valid_thread_counts) != len(self.active_processes):
+            # Round-robin fallback when thread count data is incomplete
+            if self.current_process_index >= len(self.active_processes):
+                self.current_process_index = 0
             selected_process = self.active_processes[self.current_process_index]
-            self.current_process_index = (self.current_process_index + 1) % self.max_cpu_count
+            self.current_process_index = (self.current_process_index + 1) % len(self.active_processes)
+            return selected_process
 
+        thread_count_list = valid_thread_counts
+
+        # Check if we're at thread limit capacity
+        if sum(thread_count_list) >= self.thread_lock_limit:
+            # Use round-robin when at capacity
+            if self.current_process_index >= len(self.active_processes):
+                self.current_process_index = 0
+            selected_process = self.active_processes[self.current_process_index]
+            self.current_process_index = (self.current_process_index + 1) % len(self.active_processes)
         else:
-            index = thread_count_list.index(min(thread_count_list))
+            # Find process with minimum thread count
+            min_thread_count = min(thread_count_list)
+            index = thread_count_list.index(min_thread_count)
             selected_process = self.active_processes[index]
             self.current_process_index = index
 
         return selected_process
 
     def create_thread(self, item: json):
+        """Create a new thread for processing the given item
+        
+        Returns:
+            bool: True if thread creation was successful, False otherwise
+        """
         process = self._get_next_process()
         if process is None:
-            """item["error_message"] = {"error": "No active processes available"}
-            self.output_queue.put(item)"""
+            # No available processes, requeue the item
+            print("[PROCESS CONTROLLER] No available processes, requeuing item")
             self.input_queue.put(item)
-            return
+            return False
 
-        command_data = {
-            "command": "start_thread",
-            "data": "miniflow.parallelism_engine.process.modules.python_runner.python_runner",
-            "args": (item,),
-            "kwargs": {}
-        }
-        process.get("cmd_pipe").send(command_data)
+        try:
+            command_data = {
+                "command": "start_thread",
+                "data": "miniflow.parallelism_engine.process.modules.python_runner.python_runner",
+                "args": (item,),
+                "kwargs": {}
+            }
+            process.get("cmd_pipe").send(command_data)
+            return True
+        except Exception as e:
+            print(f"[PROCESS CONTROLLER] Error creating thread: {e}")
+            # Requeue item on failure
+            self.input_queue.put(item)
+            return False
 
     def _auto_scale_processes(self):
         while not self.shutdown_event.is_set():
@@ -144,7 +174,6 @@ class ProcessController:
     def _thread_count_updater(self):
         while not self.shutdown_event.is_set():
             self.thread_count_list = self._get_process_thread_counts()
-            print(self.thread_count_list)
             time.sleep(0.2)
 
     def _start_thread_counter(self):

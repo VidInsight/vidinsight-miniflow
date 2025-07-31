@@ -504,6 +504,59 @@ class Script(BaseModel):
     # Relationships
     nodes: List["Node"] = relationship("Node", back_populates="script")
 
+# Environment Variables Table
+class EnvironmentVariable(BaseModel):
+    """
+    Environment Variable modeli - Sistem geneli ortam değişkenleri
+    
+    Bu model, workflow'larda kullanılabilecek global environment variables
+    saklar. Bu değişkenler {{$variable_name}} formatında referans edilir.
+    
+    USAGE EXAMPLE:
+    ==============
+    Database'de: name="API_URL", value="https://api.example.com"
+    Workflow'da: {"endpoint": "{{$API_URL}}/users"}
+    Resolved: {"endpoint": "https://api.example.com/users"}
+    
+    FIELDS:
+    =======
+    • name: Variable adı (unique, case-sensitive)
+    • value: Variable değeri (string, JSON destekler)
+    • description: Variable açıklaması (opsiyonel)
+    • is_active: Variable'ın aktif olup olmadığı
+    """
+    __tablename__ = 'environment_variables'
+    
+    # Variable name - unique constraint ile
+    name = Column(
+        String(255), 
+        nullable=False, 
+        unique=True,
+        comment="Environment variable name (case-sensitive, unique)"
+    )
+    
+    # Variable value - JSON veya plain text olabilir
+    value = Column(
+        Text, 
+        nullable=False,
+        comment="Environment variable value (supports JSON strings)"
+    )
+    
+    # Description - opsiyonel açıklama
+    description = Column(
+        Text, 
+        nullable=True,
+        comment="Human-readable description of the variable"
+    )
+    
+    # Active status - variable'ın aktif olup olmadığı
+    is_active = Column(
+        Boolean, 
+        nullable=False, 
+        default=True,
+        comment="Whether the environment variable is active and can be used"
+    )
+
 # Executions Table
 class Execution(BaseModel):
     """
@@ -641,4 +694,9 @@ INDEXES = [
     # Script lookups for payload creation
     "CREATE INDEX IF NOT EXISTS idx_nodes_script_id ON nodes(script_id)",
     "CREATE INDEX IF NOT EXISTS idx_scripts_path ON scripts(script_path)",
+    
+    # Environment variables optimization
+    "CREATE INDEX IF NOT EXISTS idx_environment_variables_name ON environment_variables(name)",
+    "CREATE INDEX IF NOT EXISTS idx_environment_variables_active ON environment_variables(is_active)",
+    "CREATE INDEX IF NOT EXISTS idx_environment_variables_name_active ON environment_variables(name, is_active)",
 ]

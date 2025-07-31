@@ -129,3 +129,55 @@ class ExecutionGetResponse(BaseResponse):
 
 class ExecutionListResponse(BaseResponse):
     executions: List[ExecutionGetResponse] = Field(...)
+
+
+# ENVIRONMENT VARIABLE MODELLERI
+# ==============================================================
+# 1. Environment Variable Oluşturma - Gelen/Request
+class EnvironmentVariableCreateRequest(BaseModel):
+    name: str = Field(..., description="Environment variable name (unique identifier)", min_length=1, max_length=255)
+    value: str = Field(..., description="Environment variable value", min_length=1)
+    description: Optional[str] = Field(None, description="Environment variable description")
+    is_active: bool = Field(True, description="Whether the environment variable is active")
+
+# 2. Environment Variable Oluşturma - Giden/Response
+class EnvironmentVariableCreateResponse(BaseResponse):
+    env_var_id: str = Field(..., description="Created environment variable UUID")
+    name: str = Field(..., description="Environment variable name")
+    value: str = Field(..., description="Environment variable value")
+    is_active: bool = Field(..., description="Whether the environment variable is active")
+    created_at: str = Field(..., description="Creation timestamp")
+
+# 3. Environment Variable Güncelleme - Gelen/Request
+class EnvironmentVariableUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, description="Environment variable name", min_length=1, max_length=255)
+    value: Optional[str] = Field(None, description="Environment variable value", min_length=1)
+    description: Optional[str] = Field(None, description="Environment variable description")
+    is_active: Optional[bool] = Field(None, description="Whether the environment variable is active")
+
+# 4. Environment Variable Güncelleme - Giden/Response
+class EnvironmentVariableUpdateResponse(BaseResponse):
+    env_var_id: str = Field(..., description="Updated environment variable UUID")
+    name: str = Field(..., description="Environment variable name")
+    value: str = Field(..., description="Environment variable value")
+    is_active: bool = Field(..., description="Whether the environment variable is active")
+    updated_at: str = Field(..., description="Update timestamp")
+
+# 5. Environment Variable Silme - Giden/Response
+class EnvironmentVariableDeleteResponse(BaseResponse):
+    env_var_id: str = Field(..., description="Deleted environment variable UUID")
+    name: str = Field(..., description="Deleted environment variable name")
+
+# 6. Environment Variable Detay - Giden/Response
+class EnvironmentVariableGetResponse(BaseResponse):
+    env_var_id: str = Field(..., description="Environment variable UUID")
+    name: str = Field(..., description="Environment variable name")
+    value: str = Field(..., description="Environment variable value")
+    description: Optional[str] = Field(None, description="Environment variable description")
+    is_active: bool = Field(..., description="Whether the environment variable is active")
+    created_at: str = Field(..., description="Creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+
+# 7. Environment Variable Listeleme - Giden/Response
+class EnvironmentVariableListResponse(BaseResponse):
+    environment_variables: List[EnvironmentVariableGetResponse] = Field(..., description="List of environment variables")

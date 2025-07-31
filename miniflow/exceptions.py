@@ -216,6 +216,37 @@ class ErrorManager:
                 "Database engine not initialized",
                 "Call start() method before performing operations"
             )
+
+    @staticmethod
+    def with_database_session(operation_name: str):
+        """
+        Enhanced decorator that combines operation context, engine validation, and session management
+        
+        Reduces boilerplate code by automatically handling:
+        - Operation context error management
+        - Database engine state validation  
+        - Session context management
+        
+        Usage:
+            @ErrorManager.with_database_session("script_creation")
+            def script_create(self, session, script_data, script_content):
+                return self.orchestration.create_script(session, script_data, script_content)
+        
+        Before: 4 lines of boilerplate per method
+        After: 1 decorator line
+        """
+        def decorator(func):
+            @ErrorManager.operation_context(operation_name)
+            def wrapper(self, *args, **kwargs):
+                # Automatic engine validation
+                ErrorManager.validate_engine_state(self.db_engine)
+                
+                # Automatic session context management
+                with self.db_engine.get_session_context() as session:
+                    # Inject session as first argument after self
+                    return func(self, session, *args, **kwargs)
+            return wrapper
+        return decorator
     
     @staticmethod
     def validate_required_fields(data: dict, required_fields: list, operation: str) -> None:

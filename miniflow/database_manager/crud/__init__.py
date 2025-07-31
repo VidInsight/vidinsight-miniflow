@@ -95,17 +95,18 @@ PERFORMANCE FEATURES:
 
 # =============================================================================
 # CORE WORKFLOW ENTITIES
-# Workflow definition ve structure management CRUD'ları
+# Ana workflow bileşenleri için CRUD'lar
 # =============================================================================
-from .workflow_crud import WorkflowCRUD        # Workflow lifecycle management
-from .node_crud import NodeCRUD                # Node definition management
-from .edge_crud import EdgeCRUD                # Workflow connection management
-from .script_crud import ScriptCRUD            # Reusable script management
-from .trigger_crud import TriggerCRUD          # Workflow activation rules
+from .workflow_crud import WorkflowCRUD                        # Workflow definitions
+from .node_crud import NodeCRUD                                # Node components  
+from .edge_crud import EdgeCRUD                                # Node connections
+from .script_crud import ScriptCRUD                            # Script components
+from .trigger_crud import TriggerCRUD                          # Activation rules
+from .environment_variable_crud import EnvironmentVariableCRUD # Environment variables
 
 # =============================================================================
-# EXECUTION RUNTIME ENTITIES  
-# Workflow execution ve task management CRUD'ları
+# EXECUTION RUNTIME ENTITIES
+# İş akışı çalıştırma zamanı için CRUD'lar
 # =============================================================================
 from .execution_crud import ExecutionCRUD                      # Execution lifecycle
 from .execution_input_crud import ExecutionInputCRUD          # Task queue management
@@ -129,6 +130,7 @@ __all__ = [
     "EdgeCRUD",            # Workflow connection management
     "ScriptCRUD",          # Script component management
     "TriggerCRUD",         # Activation rule management
+    "EnvironmentVariableCRUD", # Environment variable management
     
     # Execution Runtime CRUD Classes
     "ExecutionCRUD",       # Execution lifecycle management

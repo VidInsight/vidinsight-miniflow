@@ -29,7 +29,8 @@ def delete_script(scripts_dir: str, script_name: str):
         return False
 
 def extract_dynamic_node_params(node_params):
-    pattern = r"\{\{(.*?)\}\}"
+    """Extract dynamic node parameters in {{node_name.variable_name}} format"""
+    pattern = r"\{\{([^$].*?)\}\}"  # Match {{...}} but exclude {{$...}}
     extract_dynamic_node_params = {}
 
     for key, value in node_params.items():
@@ -38,6 +39,18 @@ def extract_dynamic_node_params(node_params):
             if match:
                 extract_dynamic_node_params[key] = match.group(1).strip()
     return extract_dynamic_node_params
+
+def extract_environment_variables(node_params):
+    """Extract environment variables in {{$variable_name}} format"""
+    pattern = r"\{\{\$([^}]+)\}\}"  # Match {{$variable_name}}
+    extract_env_vars = {}
+
+    for key, value in node_params.items():
+        if isinstance(value, str):
+            match = re.search(pattern, value)
+            if match:
+                extract_env_vars[key] = match.group(1).strip()
+    return extract_env_vars
 
 def split_variable_reference(variable_reference):
     variable_parts = variable_reference.strip().split('.')

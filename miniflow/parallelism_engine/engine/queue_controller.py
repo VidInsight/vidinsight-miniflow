@@ -19,6 +19,13 @@ class QueueController:
 
         self.started = True
 
+    def shutdown(self):
+        """Shutdown the queue controller gracefully"""
+        if self.started:
+            self.shutdown_event.set()
+            self.started = False
+            print("[QUEUE CONTROLLER] Shutdown signal sent")
+
     def watch_input_queue(self):
         while not self.shutdown_event.is_set():
             try:

@@ -78,24 +78,22 @@ class ScriptCRUD(BaseCRUD[Script]):
     # SCRIPT SORGULAMA YÖNETİMİ
     # ==============================================================
     def get_scripts_by_language(self, session: Session, language: ScriptType) -> List[Script]:
-        """Script diline göre script'leri getir"""
-        stmt = select(self.model).where(self.model.language == language)
-        return list(session.execute(stmt).scalars().all())
+        """Script diline göre script'leri getir - OPTIMIZED with BaseCRUD"""
+        return self.get_by_field(session, "language", language)
 
     def get_scripts_by_test_status(self, session: Session, test_status: TestStatus) -> List[Script]:
-        """Test durumuna göre script'leri getir"""
-        stmt = select(self.model).where(self.model.test_status == test_status)
-        return list(session.execute(stmt).scalars().all())
+        """Test durumuna göre script'leri getir - OPTIMIZED with BaseCRUD"""
+        return self.get_by_field(session, "test_status", test_status)
 
     def get_scripts_used_by_node(self, session: Session, node_id: str) -> List[Script]:
-        """Bir node tarafından kullanılan script'leri getir"""
+        """Bir node tarafından kullanılan script'leri getir - JOIN query, optimized execution"""
         stmt = select(self.model).join(Node).where(Node.id == node_id)
-        return list(session.execute(stmt).scalars().all())
+        return self._execute_query_list(session, stmt)  # OPTIMIZED: centralized execution
 
     def get_scripts_by_workflow(self, session: Session, workflow_id: str) -> List[Script]:
-        """Bir workflow'da kullanılan script'leri getir"""
+        """Bir workflow'da kullanılan script'leri getir - JOIN query, optimized execution"""
         stmt = select(self.model).join(Node).where(Node.workflow_id == workflow_id)
-        return list(session.execute(stmt).scalars().all())
+        return self._execute_query_list(session, stmt)  # OPTIMIZED: centralized execution
     
     def check_script_exists(self, session: Session, script_id: str) -> bool:
         """Script ID var mı kontrol et - TEK GÖREV"""

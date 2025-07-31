@@ -18,24 +18,56 @@ def python_runner(item: json, output_queue: Queue):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        if not hasattr(module, "module"):
-            raise AttributeError("The module must contain a 'module()' function")
-
-        run_module = module.module()
-
-        if not hasattr(run_module, "run"):
-            raise AttributeError("The object returned by 'module()' must have a 'run()' method")
-
-        context = item.get("context")
-
+        # Get context (task parameters)
+        context = item.get("context", {})
         if isinstance(context, str):
             context = json.loads(context)
 
+        # Create task_data payload for the script
+        task_data = {
+            "node_id": item.get("node_id"),
+            "node_name": item.get("node_name"), 
+            "execution_id": item.get("execution_id"),
+            "workflow_id": item.get("workflow_id"),
+            "node_params": context  # Parameters passed to the script
+        }
 
+        # Execute using pure functional patterns only (optimal for Miniflow)
+        result = None
+        
+        # Pattern 1: Modern main(task_data) function (PREFERRED - RECOMMENDED)
+        if hasattr(module, "main"):
+            result = module.main(task_data)
+            
+        # Pattern 2: Simple run(context) function (LIGHTWEIGHT ALTERNATIVE)
+        elif hasattr(module, "run"):
+            result = module.run(context)
+            
+        else:
+            raise AttributeError(
+                "Script must contain one of:\n"
+                "  • main(task_data) [RECOMMENDED] - Full task context with metadata\n"
+                "  • run(context) [SIMPLE] - Minimal overhead with just parameters\n"
+                "\n"
+                "✅ Both patterns are pure functional (stateless, thread-safe)\n"
+                "❌ OOP patterns removed for optimal multiprocessing performance"
+            )
 
-        result = run_module.run(context)
+        # Handle result processing
+        if result is None:
+            result = {"status": "completed", "message": "No return value"}
+            
+        # If result is string, try to parse as JSON
+        if isinstance(result, str):
+            try:
+                parsed_output = json.loads(result)
+            except json.JSONDecodeError:
+                # If not valid JSON, wrap the string
+                parsed_output = {"output": result}
+        else:
+            # If result is already dict/object, use it directly
+            parsed_output = result
 
-        parsed_output = json.loads(result)
         item["result_data"] = parsed_output
         item["status"] = "success"
 

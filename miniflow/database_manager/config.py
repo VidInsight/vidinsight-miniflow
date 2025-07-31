@@ -221,16 +221,16 @@ class DatabaseConfig:
 # =============================================================================
 
 DB_ENGINE_CONFIGS = {
-    # SQLite Configuration - Single-threaded embedded database
+    # SQLite Configuration - Multiprocessing-friendly embedded database
     DatabaseType.SQLITE: EngineConfig(
-        pool_size=1,                                      # SQLite tek connection destekler
-        max_overflow=0,                                   # Overflow connection yok
-        pool_timeout=20,                                  # Kısa timeout
+        pool_size=5,                                      # Multiprocessing için çoklu connection
+        max_overflow=10,                                  # Peak load için extra connections
+        pool_timeout=60,                                  # Uzun timeout - processes arası bekleme
         pool_recycle=-1,                                  # Connection recycle devre dışı
         pool_pre_ping=False,                             # File-based DB için gereksiz
         connect_args={                                   # SQLite-specific ayarlar
             'check_same_thread': False,                  # Multi-thread erişime izin ver
-            'timeout': 20                                # Database lock timeout
+            'timeout': 60                                # Database lock timeout (artırıldı)
         },
         isolation_level=None,                            # SQLite default isolation
     ),

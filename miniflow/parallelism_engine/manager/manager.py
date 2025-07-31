@@ -21,7 +21,7 @@ class Manager:
 
     def start(self):
         if not self.started:
-            self.process_controller = ProcessController(self.output_queue, False if platform.system() == "Windows" else True)
+            self.process_controller = ProcessController(self.input_queue, self.output_queue, False if platform.system() == "Windows" else True)
             self.process_controller.start()
 
             self.queue_controller = QueueController(self.input_queue, self.process_controller)

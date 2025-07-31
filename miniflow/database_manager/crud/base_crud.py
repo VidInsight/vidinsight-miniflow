@@ -1,163 +1,59 @@
 """
-BASE CRUD MODULE
-================
-
-Bu modül tüm entity-specific CRUD sınıfları için ortak base class sağlar.
-Generic type programming kullanarak type-safe ve reusable CRUD operations
-implement eder. Her CRUD sınıfı bu base'den inherit ederek common functionality
-kazanır ve entity-specific methods ekleyebilir.
-
-MODÜL SORUMLULUKLARI:
-====================
-1. Generic CRUD Operations - Create, Read, Update, Delete
-2. Type Safety - Generic type programming ile compile-time safety
-3. Common Query Patterns - Filtering, ordering, pagination
-4. Bulk Operations - Performance-optimized mass operations
-5. Error Handling - Consistent error handling patterns
-
-BASE CRUD ARCHITECTURE:
-=======================
-┌─────────────────────────────────────────────────────────┐
-│                    BaseCRUD<T>                         │
-├─────────────────────────────────────────────────────────┤
-│  BASIC CRUD OPERATIONS:                                │
-│  • create(session, **data) → T                        │
-│  • find_by_id(session, id) → T                        │
-│  • find_by_name(session, name) → T                    │
-│  • update(session, id, **data) → T                    │
-│  • delete(session, id) → T                            │
-├─────────────────────────────────────────────────────────┤
-│  QUERY OPERATIONS:                                     │
-│  • get_all(session, skip, limit) → List[T]            │
-│  • count(session) → int                               │
-│  • exists(session, id) → bool                         │
-│  • filter(session, filters, skip, limit) → List[T]   │
-│  • order_by(session, field, desc, skip, limit) → List[T] │
-├─────────────────────────────────────────────────────────┤
-│  BULK OPERATIONS:                                      │
-│  • select_in_bulk(session, ids) → List[T]             │
-│  • bulk_create(session, data_list) → int              │
-│  • bulk_update(session, updates) → int                │
-│  • bulk_delete(session, ids) → int                    │
-│  • truncate(session) → int                            │
-└─────────────────────────────────────────────────────────┘
-
-TYPE SAFETY:
-============
-Generic type parameter T, SQLAlchemy model türünü represent eder:
-- T: ModelType (Workflow, Node, Execution, etc.)
-- Compile-time type checking sağlar
-- IDE autocomplete ve IntelliSense desteği
-- Runtime type validation
-
-INHERITANCE PATTERN:
-===================
-```python
-class WorkflowCRUD(BaseCRUD[Workflow]):
-    def __init__(self):
-        super().__init__(Workflow)
-    
-    # Entity-specific methods
-    def get_active_workflows(self, session: Session) -> List[Workflow]:
-        return self.filter(session, {"status": "active"})
-```
-
-PERFORMANCE FEATURES:
-====================
-• Bulk Operations: Single SQL statement ile multiple records
-• Query Optimization: Index-aware query patterns
-• Lazy Loading: Efficient relationship loading
-• Connection Reuse: Session-based operation batching
-• Memory Efficiency: Streaming large result sets
-
-ERROR HANDLING PATTERNS:
-========================
-• ValueError: Invalid input parameters
-• RuntimeError: Database operation failures  
-• Custom Exceptions: Business logic violations
-• Consistent error messages with context
+Base CRUD class providing generic type-safe database operations.
+All entity-specific CRUD classes inherit from BaseCRUD[ModelType].
 """
 
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.orm import DeclarativeMeta, Session
 
-# =============================================================================
-# TYPE DEFINITIONS
-# Generic type programming için type definitions
-# =============================================================================
-
 ModelType = TypeVar("ModelType", bound=DeclarativeMeta)
-"""
-Generic type variable SQLAlchemy model'larını represent eder
-
-Bu type variable tüm SQLAlchemy DeclarativeMeta subclass'larını accept eder:
-- Workflow, Node, Execution, etc.
-- Compile-time type safety sağlar
-- IDE support ve autocomplete enable eder
-
-Example:
-    BaseCRUD[Workflow] → ModelType = Workflow
-    BaseCRUD[Node] → ModelType = Node
-"""
-
-# =============================================================================
-# BASE CRUD CLASS
-# Generic CRUD operations için ana base sınıf
-# =============================================================================
 
 class BaseCRUD(Generic[ModelType]):
-    """
-    Tüm entity CRUD sınıfları için generic base class
-    
-    Bu class generic type programming kullanarak type-safe CRUD operations
-    sağlar. Her concrete CRUD sınıfı bu base'den inherit ederek:
-    - Common CRUD functionality kazanır
-    - Entity-specific methods ekleyebilir
-    - Type safety ve IDE support benefit eder
-    
-    GENERIC TYPE PARAMETER:
-    ======================
-    ModelType: SQLAlchemy model class (Workflow, Node, etc.)
-    
-    INSTANCE ATTRIBUTES:
-    ===================
-    • model: SQLAlchemy model class reference
-    • model_name: Model class adı (debugging için)
-    
-    OPERATION CATEGORIES:
-    ====================
-    1. Basic CRUD: create, read, update, delete
-    2. Query Operations: filtering, ordering, pagination
-    3. Bulk Operations: mass insert/update/delete
-    4. Utility Operations: count, exists, truncate
-    
-    TYPE SAFETY BENEFITS:
-    ====================
-    • Compile-time type checking
-    • IDE autocomplete support
-    • Method signature validation
-    • Return type guarantee
-    """
+    """Generic base class for entity CRUD operations with type safety."""
     
     def __init__(self, model: type[ModelType]):
-        """
-        BaseCRUD instance oluşturur
+        """Initialize CRUD with SQLAlchemy model class."""
+        self.model = model
+        self.model_name = model.__name__
+
+    # ==========================================================================
+    # QUERY EXECUTION UTILITIES (NEW - ELIMINATES 24+ DUPLICATIONS)
+    # Centralized query execution to eliminate return list(session.execute(stmt).scalars().all())
+    # ==========================================================================
+    
+    def _execute_query_list(self, session: Session, stmt) -> List[ModelType]:
+        """Centralized query execution for list results."""
+        return list(session.execute(stmt).scalars().all())
+    
+    def _execute_query_first(self, session: Session, stmt) -> Optional[ModelType]:
+        """Centralized query execution for single result"""
+        return session.execute(stmt).scalars().first()
+    
+    # ==========================================================================
+    # GENERIC QUERY METHODS (NEW - ELIMINATES 15+ get_by_X DUPLICATIONS)
+    # Eliminate duplicate get_by_X patterns across all CRUD classes
+    # ==========================================================================
+    
+    def get_by_field(self, session: Session, field_name: str, field_value: Any) -> List[ModelType]:
+        """Generic field-based query for any model field."""
+        if not hasattr(self.model, field_name):
+            raise ValueError(f"Field '{field_name}' does not exist in {self.model_name}")
         
-        ALGORITHM:
-        1. Model class reference'ı store et
-        2. Model name'i debugging için extract et
-        3. Type safety validation (runtime'da implicit)
-        
-        Args:
-            model (type[ModelType]): SQLAlchemy model class
-            
-        Example:
-            >>> workflow_crud = BaseCRUD(Workflow)
-            >>> node_crud = BaseCRUD(Node)
-        """
-        self.model = model                    # SQLAlchemy model class
-        self.model_name = model.__name__      # Class name for error messages
+        stmt = select(self.model).where(getattr(self.model, field_name) == field_value)
+        return self._execute_query_list(session, stmt)
+    
+    def get_by_workflow(self, session: Session, workflow_id: str) -> List[ModelType]:
+        """Get entities by workflow_id."""
+        return self.get_by_field(session, "workflow_id", workflow_id)
+    
+    def get_by_execution(self, session: Session, execution_id: str) -> List[ModelType]:
+        """Get entities by execution_id."""
+        return self.get_by_field(session, "execution_id", execution_id)
+    
+    def get_by_status(self, session: Session, status: Any) -> List[ModelType]:
+        """Get entities by status."""
+        return self.get_by_field(session, "status", status)
 
     # ==========================================================================
     # BASIC CRUD OPERATIONS
