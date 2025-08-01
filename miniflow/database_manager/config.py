@@ -64,6 +64,19 @@ class EngineConfig:
             })
             
         return config
+    
+    def get_session_config(self) -> Dict[str, Any]:
+        """
+        Session-level parametreleri döndürür (sessionmaker için)
+        
+        Returns:
+            Dict[str, Any]: Session configuration parametreleri
+        """
+        return {
+            'autocommit': self.autocommit,
+            'autoflush': self.autoflush,
+            'expire_on_commit': self.expire_on_commit,
+        }
 
 
 # ============================================================================================ DATABASE CONFIGURATION ==
