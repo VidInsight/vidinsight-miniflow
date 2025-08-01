@@ -34,18 +34,36 @@ class EngineConfig:
     isolation_level: Optional[str] = None
     connect_args: Dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'pool_size': self.pool_size,
-            'max_overflow': self.max_overflow, 
-            'pool_timeout': self.pool_timeout,
-            'pool_recycle': self.pool_recycle,
-            'pool_pre_ping': self.pool_pre_ping,
+    def to_dict(self, db_type: Optional['DatabaseType'] = None) -> Dict[str, Any]:
+        """
+        Engine config'i SQLAlchemy parametrelerine çevirir
+        
+        Args:
+            db_type: Database türü - SQLite için bazı parametreler filtrelenir
+        """
+        config = {
             'connect_args': self.connect_args,
             'echo': self.echo,
             'echo_pool': self.echo_pool,
             'isolation_level': self.isolation_level,
         }
+        
+        # SQLite için connection pooling parametreleri desteklenmez
+        if db_type != DatabaseType.SQLITE:
+            config.update({
+                'pool_size': self.pool_size,
+                'max_overflow': self.max_overflow, 
+                'pool_timeout': self.pool_timeout,
+                'pool_recycle': self.pool_recycle,
+                'pool_pre_ping': self.pool_pre_ping,
+            })
+        else:
+            # SQLite için sadece desteklenen parametreler
+            config.update({
+                'pool_pre_ping': self.pool_pre_ping,
+            })
+            
+        return config
 
 
 # ============================================================================================ DATABASE CONFIGURATION ==
@@ -68,8 +86,11 @@ class DatabaseConfig:
 
     def get_connection_string(self) -> str:
         if self.db_type == DatabaseType.SQLITE:
-            # SQLite: Dosya tabanlı database
-            return f"sqlite:///{self.db_name}.db" 
+            # SQLite: In-memory veya dosya tabanlı database
+            if self.db_name == ":memory:":
+                return "sqlite:///:memory:"
+            else:
+                return f"sqlite:///{self.db_name}.db" 
             
         elif self.db_type == DatabaseType.MYSQL:
             # MySQL: Network üzerinden MySQL server
