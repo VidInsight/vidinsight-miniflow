@@ -4,8 +4,8 @@ from datetime import datetime
 from sqlalchemy import select, func
 
 from .crud import (
-    WorkflowCRUD, NodeCRUD, EdgeCRUD, # TriggerCRUD, 
-    ScriptCRUD, ExecutionCRUD,ExecutionInputCRUD, 
+    WorkflowCRUD, NodeCRUD, EdgeCRUD,
+    ScriptCRUD, ExecutionCRUD, ExecutionInputCRUD, 
     ExecutionOutputCRUD, ArchivedExecutionCRUD,
     AuditLogCRUD
 )
@@ -23,7 +23,7 @@ class DatabaseOrchestration:
         self.workflow_crud = WorkflowCRUD()
         self.node_crud = NodeCRUD()
         self.edge_crud = EdgeCRUD()
-        # self.trigger_crud = TriggerCRUD()  # Trigger model not implemented yet
+
         self.script_crud = ScriptCRUD()
         self.execution_crud = ExecutionCRUD()
         self.execution_input_crud = ExecutionInputCRUD()
@@ -64,12 +64,7 @@ class DatabaseOrchestration:
             raise BusinessLogicError(f"Cannot delete workflow with active executions. Found {len(active_executions)} active executions.")
         
         # 3. İlişkili bileşenleri sil (CASCADE yoksa manuel)
-        # 3a. Trigger'ları sil
-        existing_triggers = self.trigger_crud.get_triggers_by_workflow(session, workflow_id)
-        for trigger in existing_triggers:
-            self.__trigger_delete(session, trigger.id)
-        
-        # 3b. Edge'leri sil
+        # 3a. Edge'leri sil
         existing_edges = self.edge_crud.get_edges_by_workflow(session, workflow_id)
         for edge in existing_edges:
             self.__edge_delete(session, edge.id)
@@ -281,65 +276,7 @@ class DatabaseOrchestration:
         # 5. Updated edge'i döndür
         return updated_edge
 
-    # TRIGGER FUNCTIONS
-    # ==============================================================
-    def __trigger_create(self, session: Session, **trigger_data):
-        # 1. Workflow'un varlığını kontrol et
-        workflow = self.workflow_crud.find_by_id(session, trigger_data.get('workflow_id'))
 
-        # 2. Trigger oluştur
-        trigger = self.trigger_crud.create(session, **trigger_data)
-
-        # 3. Audit Log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="trigger",
-            record_id=trigger.id,
-            action=AuditAction.CREATE,
-            new_values=trigger.to_dict()
-        )
-
-        # 4. Trigger'ı döndür
-        return trigger
-
-    def __trigger_delete(self, session: Session, trigger_id):
-        # 1. Trigger'ı bul
-        old_trigger = self.trigger_crud.find_by_id(session, trigger_id)
-        
-        # 2. Trigger'ı sil
-        result = self.trigger_crud.delete(session, trigger_id)
-
-        # 3. Audit log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name="trigger",
-            record_id=old_trigger.id,
-            action=AuditAction.DELETE,
-            old_values=old_trigger.to_dict()
-        )
-
-        # 4. Silinen trigger'ı döndür
-        return old_trigger
-
-    def __trigger_update(self, session: Session, trigger_id, **trigger_data):
-        # 1. Eski değerleri al
-        old_trigger = self.trigger_crud.find_by_id(session, trigger_id)
-
-        # 2. Trigger'ı güncelle
-        updated_trigger = self.trigger_crud.update(session, trigger_id, **trigger_data)
-
-        # 3. Audit Log ekle
-        self.audit_log_crud.log_action(
-            session=session,
-            table_name='trigger',
-            record_id=updated_trigger.id,
-            action=AuditAction.UPDATE,
-            old_values=old_trigger.to_dict(),
-            new_values=updated_trigger.to_dict()
-        )
-
-        # 4. Updated trigger'ı döndür
-        return updated_trigger
 
     # SCRIPT FUNCTIONS
     # ==============================================================
@@ -419,7 +356,6 @@ class DatabaseOrchestration:
     def create_workflow(self, session: Session, workflow_data: dict):
         nodes = workflow_data["nodes"]
         edges = workflow_data["edges"]
-        triggers = workflow_data["triggers"]
         
         # 1. Workflow oluştur
         workflow = self.__workflow_create(session, **{'name':workflow_data["name"], 'description':workflow_data["description"]})
@@ -448,28 +384,12 @@ class DatabaseOrchestration:
             edge = self.__edge_create(session, **edge_create_data)
             edge_ids.append(edge.id)
 
-        # 4. Trigger'ları oluştur
-        trigger_ids = []
-        for i, trigger_data in enumerate(triggers):
-            # Trigger data'yı hazırla
-            trigger_create_data = {
-                "workflow_id": workflow.id,
-                "trigger_type": TriggerType(trigger_data["trigger_type"]),
-                "trigger_config": trigger_data.get("config", {}),
-                "is_active": trigger_data.get("is_active", True)
-            }
-            
-            # Private trigger create fonksiyonunu kullan
-            trigger = self.__trigger_create(session, **trigger_create_data)
-            trigger_ids.append(trigger.id)
-
-        # 5. Sonuçları döndür
+        # 4. Sonuçları döndür
         return {
             'workflow_id': workflow.id,
             'created_at': workflow.created_at.isoformat() if workflow.created_at else None,
             'nodes': node_ids,
             'edges': edge_ids,
-            'triggers': trigger_ids,
         }
 
     def delete_workflow(self, session: Session, workflow_id: str):
@@ -512,7 +432,6 @@ class DatabaseOrchestration:
             'created_at': created_result['created_at'],  # Zaten isoformat edilmiş
             'nodes': created_result['nodes'],
             'edges': created_result['edges'],
-            'triggers': created_result['triggers'],
         }
 
     def get_workflows(self, session: Session, page: Optional[int] = None, page_size: Optional[int] = None):
@@ -530,7 +449,7 @@ class DatabaseOrchestration:
 
     def get_workflow(self, session: Session, workflow_id: str):
         """
-        Workflow detayını getir (nodes, edges, triggers dahil)
+        Workflow detayını getir (nodes, edges dahil)
         """
         # 1. Workflow'u bul
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
@@ -550,9 +469,7 @@ class DatabaseOrchestration:
         edges = self.edge_crud.get_edges_by_workflow(session, workflow_id)
         workflow_dict['edges'] = [edge.to_dict() for edge in edges]
         
-        # 5. Trigger'ları getir
-        triggers = self.trigger_crud.get_triggers_by_workflow(session, workflow_id)
-        workflow_dict['triggers'] = [trigger.to_dict() for trigger in triggers]
+
         
         return workflow_dict
 

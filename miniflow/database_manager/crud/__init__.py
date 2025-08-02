@@ -36,7 +36,7 @@ CRUD ARCHITECTURE:
     ├─ NodeCRUD        ├─ ExecutionInputCRUD             │
     ├─ EdgeCRUD        ├─ ExecutionOutputCRUD            │
     ├─ ScriptCRUD      ├─ ArchivedExecutionCRUD          │
-    ├─ TriggerCRUD     └─ AuditLogCRUD                   │
+    └─ AuditLogCRUD                                       │
     └─────────────────────────────────────────────────────┘
 
 CRUD KATEGORILERI:
@@ -47,7 +47,6 @@ CRUD KATEGORILERI:
 • NodeCRUD: Node definition ve relationship management  
 • EdgeCRUD: Workflow connection ve dependency management
 • ScriptCRUD: Reusable script component management
-• TriggerCRUD: Workflow activation rule management
 
 **EXECUTION RUNTIME ENTITIES:**
 • ExecutionCRUD: Workflow execution lifecycle ve progress tracking
@@ -101,7 +100,7 @@ from .workflow_crud import WorkflowCRUD        # Workflow lifecycle management
 from .node_crud import NodeCRUD                # Node definition management
 from .edge_crud import EdgeCRUD                # Workflow connection management
 from .script_crud import ScriptCRUD            # Reusable script management
-# from .trigger_crud import TriggerCRUD          # Workflow activation rules (Trigger model not implemented yet)
+
 
 # =============================================================================
 # EXECUTION RUNTIME ENTITIES  
@@ -128,7 +127,7 @@ __all__ = [
     "NodeCRUD",            # Node component management
     "EdgeCRUD",            # Workflow connection management
     "ScriptCRUD",          # Script component management
-    # "TriggerCRUD",         # Activation rule management (Trigger model not implemented yet)
+
     
     # Execution Runtime CRUD Classes
     "ExecutionCRUD",       # Execution lifecycle management
