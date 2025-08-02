@@ -4,15 +4,16 @@ from datetime import datetime
 from sqlalchemy import select, func
 
 from .crud import (
-    WorkflowCRUD, NodeCRUD, EdgeCRUD, TriggerCRUD, 
+    WorkflowCRUD, NodeCRUD, EdgeCRUD, # TriggerCRUD, 
     ScriptCRUD, ExecutionCRUD,ExecutionInputCRUD, 
     ExecutionOutputCRUD, ArchivedExecutionCRUD,
     AuditLogCRUD
 )
 from .models import (
-    Workflow, Node, Edge, Trigger, Script, Execution, 
+    Workflow, Node, Edge, Script, Execution, 
     ExecutionInput, ExecutionOutput, ArchivedExecution, AuditLog,
-    WorkflowStatus, ExecutionStatus, TriggerType, ConditionType, AuditAction
+    WorkflowStatus, ExecutionStatus, 
+    ConditionType, AuditAction
 )
 from ..exceptions import ValidationError, BusinessLogicError
 from ..utils import extract_dynamic_node_params,  split_variable_reference
@@ -22,7 +23,7 @@ class DatabaseOrchestration:
         self.workflow_crud = WorkflowCRUD()
         self.node_crud = NodeCRUD()
         self.edge_crud = EdgeCRUD()
-        self.trigger_crud = TriggerCRUD()
+        # self.trigger_crud = TriggerCRUD()  # Trigger model not implemented yet
         self.script_crud = ScriptCRUD()
         self.execution_crud = ExecutionCRUD()
         self.execution_input_crud = ExecutionInputCRUD()

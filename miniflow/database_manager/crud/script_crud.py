@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from .base_crud import BaseCRUD
-from ..models import Script, ScriptType, TestStatus, Node
+from ..models import Script, ScriptType, ScriptTestStatus, Node
 
 
 class ScriptCRUD(BaseCRUD[Script]):
@@ -57,12 +57,12 @@ class ScriptCRUD(BaseCRUD[Script]):
 
     # TEST STATUS YÖNETİMİ
     # ==============================================================
-    def get_test_status(self, session: Session, script_id: str) -> Optional[TestStatus]:
+    def get_test_status(self, session: Session, script_id: str) -> Optional[ScriptTestStatus]:
         """Script'in test durumunu getir"""
         script = self.find_by_id(session, script_id)
         return script.test_status if script else None
 
-    def set_test_status(self, session: Session, script_id: str, test_status: TestStatus) -> Script:
+    def set_test_status(self, session: Session, script_id: str, test_status: ScriptTestStatus) -> Script:
         """Script'in test durumunu güncelle"""
         script = self.find_by_id(session, script_id)
         if not script:
@@ -82,7 +82,7 @@ class ScriptCRUD(BaseCRUD[Script]):
         stmt = select(self.model).where(self.model.language == language)
         return list(session.execute(stmt).scalars().all())
 
-    def get_scripts_by_test_status(self, session: Session, test_status: TestStatus) -> List[Script]:
+    def get_scripts_by_test_status(self, session: Session, test_status: ScriptTestStatus) -> List[Script]:
         """Test durumuna göre script'leri getir"""
         stmt = select(self.model).where(self.model.test_status == test_status)
         return list(session.execute(stmt).scalars().all())

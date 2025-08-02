@@ -51,10 +51,16 @@ def build_config(log_dir: Path) -> dict:
                 "level": "DEBUG",
                 "propagate": False,
             },
-            # Örnek paket logger'ı
-            "app.database": {
-                "handlers": ["console"],
+            # Database Manager Logger'ı
+            "miniflow.database": {
+                "handlers": ["console", "file_main"],
                 "level": "INFO",
+                "propagate": False,
+            },
+            # Database Engine Logger'ı (daha detaylı)
+            "miniflow.database.engine": {
+                "handlers": ["console", "file_main"],
+                "level": "DEBUG", 
                 "propagate": False,
             },
         },
