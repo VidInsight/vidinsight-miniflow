@@ -72,10 +72,10 @@ class BaseModel(Base):
     @classmethod
     def _generate_id(cls):
         prefix = getattr(cls, '__prefix__', 'XX')
-        uuid_suffix = str(uuid.uuid4()).replace('-', '')[:10].upper()
-        return f"{prefix}{uuid_suffix}"
+        uuid_suffix = str(uuid.uuid4()).replace('-', '')[:17].upper()
+        return f"{prefix}-{uuid_suffix}"
 
-    id = Column(String(12), primary_key=True)
+    id = Column(String(20), primary_key=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -167,6 +167,7 @@ class Script(BaseModel):
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text, nullable=True)
     language = Column(Enum(ScriptType), nullable=False, default=ScriptType.PYTHON)
+    type = Column(String(100), nullable=False, default=ScriptType.PYTHON)
     script_path = Column(Text, nullable=False)
     input_params = Column(JSON, default=dict, nullable=False)
     output_params = Column(JSON, default=dict, nullable=False)
