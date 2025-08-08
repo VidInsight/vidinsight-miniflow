@@ -459,17 +459,17 @@ class DatabaseOrchestration:
     def node_filter(self, session: Session, filters: dict):
         """Filter nodes based on provided criteria."""
         nodes = self.node_crud.filter(session, filters)
-        return [node.to_dict() for node in nodes]
+        return [node.id for node in nodes]
     
     def node_get_by_workflow(self, session: Session, workflow_id: str):
         """Get all nodes in a workflow."""
         nodes = self.node_crud.filter(session, {'workflow_id': workflow_id})
-        return [node.to_dict() for node in nodes]
+        return [node.id for node in nodes]
 
     def node_get_by_workflow(self, session: Session, script_id: str):
         """Get all nodes in a workflow."""
         nodes = self.node_crud.filter(session, {'workflow_id': script_id})
-        return [node.to_dict() for node in nodes]
+        return [node.id for node in nodes]
 
     # ============================================================================================== EDGE CRUD ==
     
@@ -491,7 +491,7 @@ class DatabaseOrchestration:
     def edge_filter(self, session: Session, filters: dict):
         """Filter edges based on provided criteria."""
         edges = self.edge_crud.filter(session, filters)
-        return [edge.to_dict() for edge in edges]
+        return [edge.id for edge in edges]
     
     def edge_get_by_workflow(self, session: Session, workflow_id: str):
         """Get all edges in a workflow."""
@@ -500,7 +500,7 @@ class DatabaseOrchestration:
             raise BusinessLogicError(f"Workflow with ID {workflow_id} not found.")
         
         edges = self.edge_crud.filter(session, {'workflow_id': workflow_id})
-        return [edge.to_dict() for edge in edges]
+        return [edge.id for edge in edges]
 
     # ============================================================================================== WORKFLOW BATCH OPERATIONS ==
     
@@ -582,10 +582,11 @@ class DatabaseOrchestration:
         new_workflow = self.workflow_create(session, new_name, new_description or original_workflow['description'])
         
         # Node'ları kopyala
-        original_nodes = self.node_get_by_workflow(session, workflow_id)
+        original_node_ids = self.node_get_by_workflow(session, workflow_id)
         node_mapping = {}  # Eski ID -> Yeni ID mapping
         
-        for node in original_nodes:
+        for node_id in original_node_ids:
+            node = self.node_get(session, node_id)
             new_node_data = {
                 'name': node['name'],
                 'script_id': node['script_id'],
@@ -594,11 +595,12 @@ class DatabaseOrchestration:
                 'timeout_seconds': node['timeout_seconds']
             }
             new_node = self.workflow_add_node(session, new_workflow['id'], **new_node_data)
-            node_mapping[node['id']] = new_node['id']
+            node_mapping[node_id] = new_node['id']
         
         # Edge'leri kopyala
-        original_edges = self.edge_get_by_workflow(session, workflow_id)
-        for edge in original_edges:
+        original_edge_ids = self.edge_get_by_workflow(session, workflow_id)
+        for edge_id in original_edge_ids:
+            edge = self.edge_get(session, edge_id)
             new_from_node_id = node_mapping[edge['from_node_id']]
             new_to_node_id = node_mapping[edge['to_node_id']]
             
@@ -641,7 +643,7 @@ class DatabaseOrchestration:
     def script_filter(self, session: Session, filters: dict):
         """Filter scripts based on provided criteria."""
         scripts = self.script_crud.filter(session, filters)
-        return [script.to_dict() for script in scripts]
+        return [script.id for script in scripts]
 
     # ========================================================================================= ENVIRONMENT FUNCTIONS ==
     def environment_create(self, session: Session, **environment_data):
@@ -679,7 +681,7 @@ class DatabaseOrchestration:
     def environment_filter(self, session: Session, filters: dict):
         """Filter environments based on provided criteria."""
         environments = self.environment_crud.filter(session, filters)
-        return [env.to_dict() for env in environments]
+        return [env.id for env in environments]
 
     def environment_delete_all(self, session: Session):
         """Delete all environments."""
@@ -850,4 +852,4 @@ class DatabaseOrchestration:
         Filter executions based on provided criteria.
         """
         executions = self.execution_crud.filter(session, filters)
-        return [execution.to_dict() for execution in executions]
+        return [execution.id for execution in executions]
