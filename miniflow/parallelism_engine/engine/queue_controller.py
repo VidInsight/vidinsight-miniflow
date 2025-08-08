@@ -34,3 +34,6 @@ class QueueController:
 
             except Exception as e:
                 print(f"Input watcher error: {e}")
+
+    def shutdown(self):
+        self.shutdown_event.set()

@@ -84,8 +84,7 @@ class ProcessController:
         if process is None:
             """item["error_message"] = {"error": "No active processes available"}
             self.output_queue.put(item)"""
-            self.input_queue.put(item)
-            return
+            return False
 
         command_data = {
             "command": "start_thread",
@@ -94,6 +93,7 @@ class ProcessController:
             "kwargs": {}
         }
         process.get("cmd_pipe").send(command_data)
+        return True
 
     def _auto_scale_processes(self):
         while not self.shutdown_event.is_set():
