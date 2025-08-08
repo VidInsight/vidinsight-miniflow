@@ -320,7 +320,7 @@ class DatabaseOrchestration:
 
             node_payloads = []
             for node in wf_nodes:
-                node_payloads.append(node.to_dict())
+                node_payloads.append(self._create_enhanced_node_payload(session, node))
 
             wf_payload['nodes'] = node_payloads
             wf_payload['edges'] = edge_payloads
@@ -345,8 +345,9 @@ class DatabaseOrchestration:
             wf_payload = workflow.to_dict()
             
             if include_detail:
-                # Include nodes and edges (original behavior)
-                wf_payload['nodes'] = [node.to_dict() for node in self.node_crud.filter(session, {'workflow_id': workflow.id})]
+                # Include nodes and edges with enhanced node information
+                wf_nodes = self.node_crud.filter(session, {'workflow_id': workflow.id})
+                wf_payload['nodes'] = [self._create_enhanced_node_payload(session, node) for node in wf_nodes]
                 wf_payload['edges'] = [edge.to_dict() for edge in self.edge_crud.filter(session, {'workflow_id': workflow.id})]
                 
             wf_payloads.append(wf_payload)
@@ -441,12 +442,37 @@ class DatabaseOrchestration:
 
     # ============================================================================================== NODE CRUD ==
     
+    def _create_enhanced_node_payload(self, session: Session, node):
+        """Create enhanced node payload with script description and output_params."""
+        node_payload = node.to_dict()
+        
+        # Add script description and output_params if script exists
+        if node.script_id:
+            try:
+                script = self.script_crud.find_by_id(session, node.script_id)
+                if script:
+                    node_payload['description'] = script.description
+                    # Add script's output_params directly to node payload
+                    node_payload['output_params'] = script.output_params if script.output_params else {}
+                else:
+                    node_payload['description'] = None
+                    node_payload['output_params'] = {}
+            except Exception:
+                # If script not found, set default values
+                node_payload['description'] = None
+                node_payload['output_params'] = {}
+        else:
+            node_payload['description'] = None
+            node_payload['output_params'] = {}
+            
+        return node_payload
+    
     def node_get(self, session: Session, node_id: str):
-        """Get a node by ID."""
+        """Get a node by ID with enhanced script information."""
         node = self.node_crud.find_by_id(session, node_id)
         if not node:
             raise BusinessLogicError(f"Node with ID {node_id} not found.")
-        return node.to_dict()
+        return self._create_enhanced_node_payload(session, node)
     
     def node_exists(self, session: Session, node_id: str):
         """Check if a node exists by ID."""

@@ -1,11 +1,3 @@
-# ========================================================================================== ARCHIVED EXECUTION MODEL ==
-__version__ = "1.0.0"
-__author__ = "Enes Arslan"
-
-# =============================================================================
-# CONFIGURATION COMPONENTS
-# Database connection ve konfigrasyon bileşenleri
-# =============================================================================
 from .config import DatabaseType                               # DB türü enum (SQLite, MySQL, PostgreSQL)
 from .config import EngineConfig                               # Engine konfigrasyon sınıfı
 from .config import DatabaseConfig                             # Database genel konfigrasyon sınıfı
@@ -34,10 +26,6 @@ from .models import Base                                        # SQLAlchemy dec
 # =============================================================================
 from .orchestration import DatabaseOrchestration               # Ana orchestration sınıfı
 
-# =============================================================================
-# PUBLIC API EXPORTS
-# Bu modülden dışarıya açılan tüm bileşenler
-# =============================================================================
 __all__ = [
     # Configuration exports
     "DatabaseType",

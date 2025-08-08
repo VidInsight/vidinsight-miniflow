@@ -131,6 +131,7 @@ class Node(BaseModel):
     workflow_id = Column(String(12), ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
     script_id = Column(String(12), ForeignKey('scripts.id', ondelete='SET NULL'), nullable=True)
     name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
     params = Column(JSON, nullable=True, default=dict)
     max_retries = Column(Integer, default=3, nullable=False)
     timeout_seconds = Column(Integer, default=300, nullable=False)
