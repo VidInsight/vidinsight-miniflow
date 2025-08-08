@@ -31,12 +31,8 @@ def python_runner(item: json, output_queue: Queue):
         if isinstance(context, str):
             context = json.loads(context)
 
-
-
         result = run_module.run(context)
-
-        parsed_output = json.loads(result)
-        item["result_data"] = parsed_output
+        item["result_data"] = result
         item["status"] = "success"
 
     except FileNotFoundError:
