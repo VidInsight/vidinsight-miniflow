@@ -1,0 +1,84 @@
+WORKFLOW Endpoints (/api/v1/workflows)
+=========================================
+[X] POST /load
+[] POST /create
+[X] POST /update/{workflow_id}
+[X] POST /delete/{workflow_id} 
+[X] GET /
+[X] GET /{workflow_id}  
+[X] GET /list
+[X] GET /list?include_detail=true
+[X] GET /filter
+[X] GET /count
+[X] GET /exist/{workflow_id}
+[X] POST /add_node/{workflow_id}
+[X] POST /remove_node/{workflow_id}
+[X] POST /add_edge/{workflow_id}
+[X] POST /remove_edge/{workflow_id}
+[X] POST /add_nodes_batch/{workflow_id}
+[X] POST /add_edges_batch/{workflow_id}
+[X] POST /clone/{workflow_id}
+[X] POST /update_structure/{workflow_id}
+
+NODE Endpoints (/api/v1/nodes)
+===========================================
+[X] GET /
+[X] GET /{node_id}
+[X] GET /list
+[X] GET /filter
+[X] GET /count
+[X] GET /exist/{node_id}
+[X] GET /by_workflow/{workflow_id}
+[X] GET /by_script/{script_id}
+
+EDGE Endpoints (/api/v1/edges)
+===========================================
+[X] GET /
+[X] GET /{node_id}
+[X] GET /list
+[X] GET /filter
+[X] GET /count
+[X] GET /exist/{node_id}
+[X] GET /workflow/{workflow_id}
+
+SCRIPT Endpoints (/api/v1/scripts)
+=========================================
+[X] POST /create    
+[X] POST /update/{script_id}
+[X] POST /delete/{script_id} 
+[X] GET /
+[X] GET /{script_id}  
+[X] GET /{script_id}?include_content=true
+[X] GET /list
+[X] GET /filter
+[X] GET /count
+[X] GET /exist/{script_id} 
+[ ] POST /{script_id}/test 
+[ ] GET /{script_id}/usage  
+
+ENVIROMENT Endpoints (/api/v1/environments)
+=========================================== 
+[X] POST /create    
+[X] POST /update/{environment_variable_id}
+[X] POST /delete/{environment_variable_id}
+[X] GET /
+[X] GET /{environment_variable_id}
+[X] GET /list
+[X] GET /filter
+[X] GET /count
+[X] GET /exist/{environment_variable_id}
+[X] POST /delete_all
+
+EXECUTION Endpoints (/api/v1/executions)
+===========================================
+[X] POST /start/{workflow_id}    
+[X] POST /cancel/{execution_id}
+[X] GET /
+[X] GET /{execution_id}
+[X] GET /{execution_id}/results
+[X] GET /{execution_id}/status
+[X] GET /list?include_detail=true
+[X] GET /filter
+[X] GET /count
+[X] GET /exist/{execution_id}
+[] GET /{execution_id}/logs

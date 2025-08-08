@@ -85,7 +85,7 @@ class MiniflowCore:
     @staticmethod
     def __create_config(db_type: str, **db_params):
         config_map = {
-            "sqlite": lambda: get_sqlite_config(db_params.get("db_name", "test_database")),
+            "sqlite": lambda: get_sqlite_config(**db_params),
             "postgresql": lambda: get_postgresql_config(
                 db_name=db_params.get('db_name', 'workflow_db'),
                 host=db_params.get('host', 'localhost'),
@@ -334,7 +334,7 @@ class MiniflowCore:
             workflow_data["edges"] = []
         
         with self.db_engine.get_session_context() as session:
-            result = self.orchestration.create_workflow(session, workflow_data)
+            result = self.orchestration.workflow_create(session, **workflow_data)
 
         logger.info(f"Workflow '{workflow_data['name']}' created successfully")
         return result
@@ -366,36 +366,42 @@ class MiniflowCore:
         return result
 
     @ErrorManager.operation_context("workflow_listing")
-    def workflow_list(self, page: Optional[int] = None, page_size: Optional[int] = None) -> dict:
+    def workflow_list(self, page: Optional[int] = None, page_size: Optional[int] = None, include_detail: bool = False) -> dict:
         ErrorManager.validate_engine_state(self.db_engine)
 
         with self.db_engine.get_session_context() as session:
-            return self.orchestration.get_workflows(session, page, page_size)
+            return self.orchestration.workflow_list(session, include_detail)
 
     @ErrorManager.operation_context("workflow_retrieval")
-    def workflow_get(self, workflow_id: str) -> dict:
+    def workflow_get(self, workflow_id: str, include_detail: bool = True) -> dict:
         ErrorManager.validate_engine_state(self.db_engine)
         
         if not workflow_id:
             raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
 
         with self.db_engine.get_session_context() as session:
-            return self.orchestration.get_workflow(session, workflow_id)
+            return self.orchestration.workflow_get(session, workflow_id, include_detail)
     
     # EXECUTION METOTLARI 
     # ===========================================================
-    @ErrorManager.operation_context("trigger_workflow")
-    def trigger_workflow(self, workflow_id: str) -> dict:
+    @ErrorManager.operation_context("execution_start")
+    def execution_start(self, workflow_id: str) -> dict:
+        """Start workflow execution with dependency calculation."""
         ErrorManager.validate_engine_state(self.db_engine)
         
         if not workflow_id:
             raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
     
         with self.db_engine.get_session_context() as session:
-            result = self.orchestration.trigger_workflow(session, workflow_id)
+            result = self.orchestration.execution_start(session, workflow_id)
         
-        logger.info(f"Workflow {workflow_id} triggered successfully")
+        logger.info(f"Execution started for workflow {workflow_id}: {result['execution_id']}")
         return result
+    
+    @ErrorManager.operation_context("trigger_workflow")
+    def trigger_workflow(self, workflow_id: str) -> dict:
+        """Legacy method - delegates to execution_start for backward compatibility."""
+        return self.execution_start(workflow_id)
     
     @ErrorManager.operation_context("execution_cancellation")
     def cancel_execution(self, execution_id: str) -> dict:

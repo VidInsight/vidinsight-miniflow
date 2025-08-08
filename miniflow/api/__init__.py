@@ -5,18 +5,19 @@ FastAPI based REST API for workflow management
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
+import os
 
 from ..database_manager import *
 from ..exceptions import MiniflowException, ErrorManager, create_error_response, handle_unexpected_error
 from .models import ErrorResponse
+from .config.settings import settings
+from .config.middleware import setup_middleware
 
 # Import MiniflowCore from main.py (root level)
 import sys
-import os
 
 # Add project root to path
 current_dir = os.path.dirname(__file__)
@@ -29,14 +30,13 @@ from ..main import MiniflowCore
 logger = logging.getLogger(__name__)
 
 # Initialize MiniflowCore
-# (Moved up so lifespan can reference it)
-test_mode = os.getenv("MINIFLOW_TEST_MODE", "false").lower() == "true"
+test_mode = settings.test_mode
 if test_mode:
-    db_name = os.getenv("MINIFLOW_TEST_DB_NAME", "test_miniflow_api")
+    db_name = settings.test_db_name
     print(f"🧪 Running in TEST MODE with database: {db_name}")
     miniflow_core = MiniflowCore(db_type="sqlite", db_name=db_name)
 else:
-    miniflow_core = MiniflowCore(db_type="sqlite", db_name="miniflow_api")
+    miniflow_core = MiniflowCore(db_type="sqlite", db_name=settings.db_name)
 
 # Lifespan context manager for startup/shutdown events
 @asynccontextmanager
@@ -61,22 +61,16 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Miniflow API",
-    description="Workflow orchestration and management API",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    title=settings.title,
+    description=settings.description,
+    version=settings.version,
+    docs_url=settings.docs_url,
+    redoc_url=settings.redoc_url,
     lifespan=lifespan
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Setup middleware
+setup_middleware(app)
 
 # CENTRALIZED EXCEPTION HANDLERS
 # ==============================================================
@@ -105,11 +99,11 @@ async def general_exception_handler(request: Request, exc: Exception):
         content=error_response
     )
 
-# Import and register routes
-from .routes.script_routes import router as script_router
-from .routes.workflow_routes import router as workflow_router
-from .routes.execution_routes import router as execution_router
+# Import and register V1 routes
+from .routes.v1 import workflow_router, script_router, execution_router, health_router
 
-app.include_router(script_router, prefix="/miniflow")
-app.include_router(workflow_router, prefix="/miniflow")
-app.include_router(execution_router, prefix="/miniflow")
+# Register routes with API version prefix
+app.include_router(workflow_router, prefix="/api/v1")
+app.include_router(script_router, prefix="/api/v1")
+app.include_router(execution_router, prefix="/api/v1")
+app.include_router(health_router, prefix="/api/v1")
