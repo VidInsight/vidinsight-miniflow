@@ -28,7 +28,7 @@ class WorkflowCRUD(BaseCRUD[Workflow], AuditMixin):
         return super().create(session, **workflow_data)
 
     @audit_update("workflows")
-    def delete_workflow(self, session: Session, workflow_id: str, **workflow_data) -> Workflow:
+    def update_workflow(self, session: Session, workflow_id: str, **workflow_data) -> Workflow:
         """Update workflow with name uniqueness validation and audit logging."""
         if workflow_data.get('name'):
             old_workflow = self.find_by_id(session, workflow_id)
@@ -39,6 +39,6 @@ class WorkflowCRUD(BaseCRUD[Workflow], AuditMixin):
         return super().update(session, workflow_id, **workflow_data)
 
     @audit_delete("workflows")
-    def update_workflow(self, session: Session, workflow_id: str) -> Workflow:
+    def delete_workflow(self, session: Session, workflow_id: str) -> Workflow:
         """Delete workflow with audit logging."""
         return super().delete(session, workflow_id)

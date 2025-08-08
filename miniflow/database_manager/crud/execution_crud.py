@@ -16,7 +16,7 @@ class ExecutionCRUD(BaseCRUD[Execution], AuditMixin):
         super().__init__(Execution)
         self._init_audit()
 
-    # ==================================================================================== BUSINESS METHODS ==
+    # ============================================================================================== BUSINESS METHODS ==
 
     @audit_create("executions")
     def create_execution(self, session: Session, **kwargs) -> Execution:
@@ -32,3 +32,12 @@ class ExecutionCRUD(BaseCRUD[Execution], AuditMixin):
     def delete_execution(self, session: Session, execution_id: str) -> Execution:
         """Delete execution with audit logging."""
         return super().delete(session, execution_id)
+
+    # ============================================================================================== BUSINESS METHODS ==
+    def get_result(self, session: Session, execution_id: str):
+        execution = self.find_by_id(session, execution_id)
+        return execution.results
+
+    def get_status(self, session: Session, execution_id: str) -> ExecutionStatus:
+        execution = self.find_by_id(session, execution_id)
+        return execution.status

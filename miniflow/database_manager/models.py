@@ -205,6 +205,11 @@ class ExecutionInput(BaseModel):
     priority = Column(Integer, default=0, nullable=False)
     dependency_count = Column(Integer, default=0, nullable=False)
     wait_factor = Column(Integer, default=0, nullable=False)
+    
+    # Denormalized fields for performance (scheduler optimization)
+    node_name = Column(String(100), nullable=False)  
+    script_path = Column(Text, nullable=True)  
+    node_params = Column(JSON, default=dict, nullable=False)  
 
     execution: "Execution" = relationship("Execution", back_populates="execution_inputs")
     node: "Node" = relationship("Node", back_populates="execution_inputs")

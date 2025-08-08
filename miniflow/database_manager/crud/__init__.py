@@ -100,7 +100,7 @@ from .workflow_crud import WorkflowCRUD        # Workflow lifecycle management
 from .node_crud import NodeCRUD                # Node definition management
 from .edge_crud import EdgeCRUD                # Workflow connection management
 from .script_crud import ScriptCRUD            # Reusable script management
-
+from .enviroment_variable_crud import EnvironmentVariableCRUD
 
 # =============================================================================
 # EXECUTION RUNTIME ENTITIES  
@@ -127,6 +127,7 @@ __all__ = [
     "NodeCRUD",            # Node component management
     "EdgeCRUD",            # Workflow connection management
     "ScriptCRUD",          # Script component management
+    "EnvironmentVariableCRUD", # Environment variable management
 
     
     # Execution Runtime CRUD Classes
