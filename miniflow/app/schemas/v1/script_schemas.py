@@ -10,6 +10,14 @@ class ScriptSummary(BaseModel):
     script_path: str
     test_status: str
 
+class ScriptDetail(ScriptSummary):
+    """Script detay bilgileri"""
+    input_params: Dict[str, Any] = {}
+    output_params: Dict[str, Any] = {}
+    script_content: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 # =====================================================================================================  SCRIPT CREATE  ==
 # REQUEST SCHEMA
 class ScriptCreateRequest(BaseModel):
@@ -102,7 +110,7 @@ class ScriptListResponse(ListResponse):
 # RESPONSE SCHEMA
 class ScriptDetailResponse(DataResponse):
     """Script detay response"""
-    data: ScriptSummary
+    data: ScriptDetail
 
 # ======================================================================================================  SCRIPT COUNT  ==
 # RESPONSE SCHEMA

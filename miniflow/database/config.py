@@ -145,6 +145,19 @@ class EngineConfig:
             'isolation_level': self.isolation_level,
         }
 
+    def get_session_config(self) -> Dict[str, Any]:
+        """
+        SQLAlchemy sessionmaker için gerekli konfigürasyonu döndürür
+        
+        Returns:
+            Dict[str, Any]: Session konfigürasyonu
+        """
+        return {
+            'autocommit': False,
+            'autoflush': True,
+            'expire_on_commit': False
+        }
+
 # =============================================================================
 # DATABASE CONFIGURATION CLASS
 # Ana database konfigrasyon sınıfı - connection bilgileri ve engine config

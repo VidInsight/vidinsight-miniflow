@@ -1,4 +1,5 @@
 from .base_schemas import *
+from pydantic import field_validator
 
 # =================================================================================================  WORKFLOW SCHEMAS ==
 class WorkflowSummary(BaseModel):
@@ -29,14 +30,18 @@ class WorkflowCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
     priority: Optional[int] = None
-    nodes: Optional[Dict[str, Any]] = []
-    edges: Optional[Dict[str, Any]] = []
+    nodes: Optional[List[Dict[str, Any]]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
 
 # RESPONSE SCHEMA
 class WorkflowCreateResponse(BaseResponse):
     """Workflow oluşturma response"""
     workflow_id: str
     name: str
+    workflow_status: str
+    created_at: str
+    created_nodes_count: Optional[int] = None
+    created_edges_count: Optional[int] = None
 
 # =================================================================================================  WORKFLOW UPDATE  ==
 # REQUEST SCHEMA
@@ -45,14 +50,16 @@ class WorkflowUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     priority: Optional[int] = None
-    nodes: Optional[List[Dict[str, Any]]] = []
-    edges: Optional[List[Dict[str, Any]]] = []
+    nodes: Optional[List[Dict[str, Any]]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
 
 # RESPONSE SCHEMA
 class WorkflowUpdateResponse(BaseResponse):
     """Workflow güncelleme response"""
     workflow_id: str
     updated_fields: List[str]
+    updated_nodes_count: Optional[int] = None
+    updated_edges_count: Optional[int] = None
 
 # =================================================================================================  WORKFLOW DELETE  ==
 # RESPONSE SCHEMA

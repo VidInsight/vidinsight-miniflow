@@ -1,64 +1,43 @@
 from typing import List, Optional, Dict, Any, Union
-from sqlalchemy import select, and_, or_, func, desc
 from sqlalchemy.orm import Session
-from datetime import datetime
+from sqlalchemy import select, and_, func
 
 from .base_crud import BaseCRUD
 from ..models import ExecutionOutput, ExecutionOutputStatus, Execution, Node
+from ..decorators.auditlog_decorators import audit_create, audit_update, audit_delete, AuditMixin
 
 
-class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput]):
-    
+class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput], AuditMixin):
+    """
+    ExecutionOutput entity CRUD operations.
+    Handles result collection and dynamic parameter resolution.
+    """
+
     def __init__(self):
         super().__init__(ExecutionOutput)
+        self._init_audit()
 
-    
-    """
-    BaseCRUD'dan miras alınan fonksiyonlar:
-    ============================================================
-    - create()
-    - find_by_id()
-    - find_by_name() 
-    - update()
-    - delete()
-    - get_all()
-    - count(), 
-    - exists()
-    - filter() 
-    - order_by()
-    - select_in_bulk()
-    - truncate(),
-    - bulk_create()
-    - bulk_update()
-    - bulk_delete()
-    """
+    # ==================================================================================== BUSINESS METHODS ==
 
-    def get_execution_outputs_by_execution(self, session: Session, execution_id: str) -> List[ExecutionOutput]:
-        """Get all execution outputs for a specific execution"""
-        stmt = select(self.model).where(self.model.execution_id == execution_id)
-        return list(session.execute(stmt).scalars().all())
+    @audit_create("execution_outputs")
+    def create_execution_output(self, session: Session, **kwargs) -> ExecutionOutput:
+        """Create new execution output with audit logging."""
+        return super().create(session, **kwargs)
 
-    # SCHEDULER SPECIFIC METHODS
-    # ==============================================================
-    
-    def create_execution_output(self, session: Session, execution_id: str, node_id: str, 
-                               status: ExecutionOutputStatus, result_data: Optional[Dict[str, Any]] = None,
-                               started_at: Optional[datetime] = None, 
-                               ended_at: Optional[datetime] = None) -> ExecutionOutput:
-        """
-        Create execution output with all required fields
-        Uses proper enum types and handles datetime defaults
-        """
-        output_data = {
-            'execution_id': execution_id,
-            'node_id': node_id,
-            'status': status,
-            'result_data': result_data or {},
-            'started_at': started_at or datetime.utcnow(),
-            'ended_at': ended_at or datetime.utcnow()
-        }
-        
-        return self.create(session, **output_data)
+    @audit_update("execution_outputs")
+    def update_execution_output(self, session: Session, execution_output_id: str, **kwargs) -> ExecutionOutput:
+        """Update execution output with audit logging."""
+        return super().update(session, execution_output_id, **kwargs)
+
+    @audit_delete("execution_outputs")
+    def delete_execution_output(self, session: Session, execution_output_id: str) -> ExecutionOutput:
+        """Delete execution output with audit logging."""
+        return super().delete(session, execution_output_id)
+
+    def check_output_exists(self, session: Session, execution_id: str, node_id: str) -> bool:
+        """Check if execution output exists for given execution and node."""
+        outputs = self.filter(session, {'execution_id': execution_id, 'node_id': node_id})
+        return len(outputs) > 0
 
     def get_outputs_by_execution_and_status(self, session: Session, execution_id: str, 
                                            status: ExecutionOutputStatus) -> List[ExecutionOutput]:
@@ -125,20 +104,6 @@ class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput]):
             }
         
         return dependency_data
-
-    def check_output_exists(self, session: Session, execution_id: str, node_id: str) -> bool:
-        """Check if execution output already exists for a node"""
-        stmt = (
-            select(func.count(self.model.id))
-            .where(
-                and_(
-                    self.model.execution_id == execution_id,
-                    self.model.node_id == node_id
-                )
-            )
-        )
-        count = session.execute(stmt).scalar_one()
-        return count > 0
 
     def get_execution_progress(self, session: Session, execution_id: str) -> Dict[str, int]:
         """

@@ -5,16 +5,22 @@ FastAPI Dependencies - Dependency injection için kullanılacak fonksiyonlar
 from miniflow.app.services import WorkflowService, NodeService, EdgeService, ScriptService, ExecutionService, EnvVarService
 from miniflow.main import MiniflowCore
 
-# Global core instance (gerçek uygulamada configuration'dan gelecek)
+# Global core instance - main.py tarafından set edilecek
 _core_instance = None
+
+def set_core_instance(core: MiniflowCore) -> None:
+    """External core instance'ı set et (main.py tarafından kullanılır)"""
+    global _core_instance
+    _core_instance = core
 
 def get_core() -> MiniflowCore:
     """MiniflowCore instance'ını getir"""
     global _core_instance
     if _core_instance is None:
-        # TODO: Gerçek configuration ile initialize et
-        # For now, use SQLite as default for development
-        _core_instance = MiniflowCore(db_type="sqlite", db_name="miniflow_dev.db", enable_scheduler=False)
+        # Fallback: Eğer main.py tarafından set edilmemişse default oluştur
+        # Bu durumda sadece API çalışır, scheduler kapalı olur
+        _core_instance = MiniflowCore(db_type="sqlite", db_name="miniflow_dev", enable_scheduler=False)
+        _core_instance.start()
     return _core_instance
 
 def get_workflow_service() -> WorkflowService:

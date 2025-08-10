@@ -4,87 +4,135 @@ from .base_service import BaseService
 from ..schemas.v1.script_schemas import ScriptSummary
 
 
-def orchestration_dummy():
-    return {}
-
 class ScriptService(BaseService):
     """Script CRUD ve business logic işlemlerini yöneten servis"""
 
 # =====================================================================================================  SCRIPT CREATE  ==
     async def script_create(self, script_data: Dict[str, Any]) -> Dict[str, Any]:
         """Yeni script oluştur"""
-        create_response = orchestration_dummy()  # TODO: Implement actual script creation logic
-        create_response["message"] = "Script created successfully"
-        return create_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.create_script(session, script_data)
+                session.commit()
+                result["message"] = "Script created successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # =====================================================================================================  SCRIPT UPDATE  ==
     async def script_update(self, script_id: str, script_data: Dict[str, Any]) -> Dict[str, Any]:
         """Script'i güncelle"""
-        update_response = orchestration_dummy()  # TODO: Implement actual script update logic
-        update_response["message"] = "Script updated successfully"
-        return update_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.update_script(session, script_id, script_data)
+                session.commit()
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # =====================================================================================================  SCRIPT DELETE  ==
     async def script_delete(self, script_id: str, force: bool = False) -> Dict[str, Any]:
         """Script'i sil"""
-        delete_response = orchestration_dummy()  # TODO: Implement actual script deletion logic
-        delete_response["message"] = "Script deleted successfully"
-        return delete_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.delete_script(session, script_id, force)
+                session.commit()
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # ===================================================================================================  SCRIPT VALIDATE  ==
     async def script_validate(self, script_id: str) -> Dict[str, Any]:
         """Script'i doğrula"""
-        validate_response = orchestration_dummy() # TODO: Implement actual script validation logic
-        validate_response["message"] = "Script validation completed"
-        return validate_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.validate_script(session, script_id)
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # =====================================================================================================  SCRIPT SEARCH  ==
     async def script_search(self, search_criteria: Dict[str, Any]) -> Dict[str, Any]:
         """Script'leri filtrele/ara"""
-        search_response = orchestration_dummy()  # TODO: Implement actual script search logic
-
-        scripts = {}
-        scripts["message"] = "Script search completed"
-        scripts["data"] = [ScriptSummary(**script) for script in search_response]
-
-        return scripts
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.search_scripts(session, search_criteria)
+                
+                # Convert data to ScriptSummary objects
+                if 'data' in result:
+                    result['data'] = [ScriptSummary(**script_dict) for script_dict in result['data']]
+                
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # =======================================================================================================  SCRIPT LIST  ==
-    async def script_list(self, page: Optional[int] = None, page_size: Optional[int] = None) -> Dict[str, Any]:
+    async def script_list(self, language: Optional[str] = None, test_status: Optional[str] = None, 
+                         page: Optional[int] = None, page_size: Optional[int] = None) -> Dict[str, Any]:
         """Tüm script'leri listele"""
-        list_response = orchestration_dummy()  # TODO: Implement actual script listing logic
-
-        scripts = {}
-        scripts["message"] = "Scripts listed successfully"
-        scripts["data"] = [ScriptSummary(**script) for script in list_response]
-
-        return scripts
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.get_scripts(session, language, test_status, page, page_size)
+                
+                # Convert data to ScriptSummary objects
+                if 'data' in result:
+                    result['data'] = [ScriptSummary(**script_dict) for script_dict in result['data']]
+                
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # ========================================================================================================  SCRIPT GET  ==
     async def script_get(self, script_id: str, include_content: bool = False) -> Dict[str, Any]:
         """Script detaylarını getir"""
-        get_response = orchestration_dummy()  # TODO: Implement actual script retrieval logic
-        get_response["message"] = "Script retrieved successfully"
-        get_response["data"] = ScriptSummary(**get_response)  # Bu satır yanlış formatı bozuyor
-        return get_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.get_script(session, script_id, include_content)
+                
+                # Convert data to ScriptSummary object
+                if 'data' in result:
+                    result['data'] = ScriptSummary(**result['data'])
+                
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # ======================================================================================================  SCRIPT COUNT  ==
-    async def script_count(self) -> Dict[str, Any]:
+    async def script_count(self, group_by: Optional[str] = None) -> Dict[str, Any]:
         """Script sayılarını getir (total, by language, etc.)"""
-        count_response = orchestration_dummy()   # TODO: Implement actual script count logic
-        count_response["message"] = "Script count retrieved successfully"
-        return count_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.count_scripts(session, group_by)
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # =====================================================================================================  SCRIPT EXISTS  ==
     async def script_exists(self, script_id: str) -> Dict[str, Any]:
         """Script'in var olup olmadığını kontrol et"""
-        exists_response = orchestration_dummy()  # TODO: Implement actual script existence check logic
-        exists_response["message"] = "Script existence checked"
-        return exists_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.script_exists(session, script_id)
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e
 
 # =====================================================================================================  SCRIPT TEST  ==
     async def script_test(self, script_id: str, test_data: Dict[str, Any]) -> Dict[str, Any]:
         """Script'i test et"""
-        test_response = orchestration_dummy()  # TODO: Implement actual script testing logic
-        test_response["message"] = "Script test completed"
-        return test_response
+        try:
+            with self.core.db_engine.get_session_context() as session:
+                result = self.orchestrator.test_script(session, script_id, test_data)
+                session.commit()  # Commit test status update
+                result["message"] = "Script operation completed successfully"
+                return result
+        except Exception as e:
+            raise e

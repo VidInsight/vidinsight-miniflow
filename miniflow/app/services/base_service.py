@@ -10,6 +10,5 @@ class BaseService:
         """
         BaseService sınıfının yapıcı metodu.
         """
-
         self.core = core
         self.orchestrator = core.orchestration

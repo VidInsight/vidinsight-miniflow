@@ -6,7 +6,6 @@ from datetime import datetime
 
 # Utility
 from .utils import setup_logging
-from .utils import create_script, delete_script
 
 # Exceptions
 from .exceptions import MiniflowException, ErrorManager
@@ -15,9 +14,9 @@ from .exceptions import (DatabaseError, SchedulerError, EngineError,
                          ValidationError, BusinessLogicError, ResourceError)
 
 # Database
-from .database_manager import DatabaseConfig, DatabaseEngine, DatabaseOrchestration, Base
-from .database_manager import get_sqlite_config, get_mysql_config, get_postgresql_config
-from .database_manager import create_database_engine
+from .database import DatabaseConfig, DatabaseEngine, DatabaseOrchestration, Base
+from .database import get_sqlite_config, get_mysql_config, get_postgresql_config
+from .database import create_database_engine
 
 # Parallelism Engine
 from .parallelism_engine import Manager
@@ -246,226 +245,15 @@ class MiniflowCore:
             finally:
                 self.output_monitor = None
 
-    # SCRIPT METOTLARI 
+    # CORE SYSTEM HEALTH CHECK
     # ===========================================================
-    @ErrorManager.operation_context("script_creation")
-    def script_create(self, script_data: dict, script_content: str) -> dict:
-        # Validate inputs
-        ErrorManager.validate_engine_state(self.db_engine)
-        ErrorManager.validate_required_fields(script_data, ["name"], "script creation")
+    # All database operations now handled through Service layer
+    # via app/services/ and orchestration layer
 
-        if not script_content or not script_content.strip():
-            raise ValidationError(
-                "Script content cannot be empty",
-                "Provide valid Python script content"
-            )
-            
-        # 2. Dosya oluştur
-        absolute_path = create_script(
-            scripts_dir=self.scripts_dir,
-            script_name=script_data.get("name"),
-            script_extension="py",
-            script_content=script_content
-        )
-
-        # 3. Veritabanı için payload oluştur
-        payload = {
-            'name': script_data['name'],
-            'description': script_data.get('description'),
-            'language': 'PYTHON',  # ScriptType.PYTHON enum value
-            'input_params': script_data.get('input_params', {}),
-            'output_params': script_data.get('output_params', {}),
-            'script_path' : absolute_path
-        }
-
-        # 5. Veritabanı kaydı oluştur
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.create_script(session, payload)
-            session.flush()
-            session.commit()
-            
-        # 6. Çıktıyı Döndür
-        logger.info(f"Script created successfully: {script_data['name']}")
-        return result
-        
-    @ErrorManager.operation_context("script_deletion")
-    def script_delete(self, script_id: str) -> dict:
-        # 0. Temel Kontroller
-        ErrorManager.validate_engine_state(self.db_engine)
-
-        if not script_id:
-            raise ValidationError("Script ID is required", "Provide valid script ID")
-        
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.delete_script(session, script_id)
-
-        return result
-
-    @ErrorManager.operation_context("script_listing")
-    def script_list(self) -> dict:
-        # 0. Temel Kontroller
-        ErrorManager.validate_engine_state(self.db_engine)
-
-        with self.db_engine.get_session_context() as session:
-            result =  self.orchestration.get_scripts(session)
-
-        return result
-
-    @ErrorManager.operation_context("script_retrieval")
-    def script_get(self, script_id: str, include_content: bool = False) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not script_id:
-            raise ValidationError("Script ID is required", "Provide valid script ID")
-
-        with self.db_engine.get_session_context() as session:
-            result =  self.orchestration.get_script(session, script_id, include_content)
-
-        return result
-
-    # WORKFLOW METOTLARI 
-    # ===========================================================
-    @ErrorManager.operation_context("workflow_creation")
-    def workflow_create(self, workflow_data: dict) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        ErrorManager.validate_required_fields(workflow_data, ["name", "nodes"], "workflow creation")
-        # Ensure edges exist even if empty
-        if "edges" not in workflow_data:
-            workflow_data["edges"] = []
-        
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.create_workflow(session, workflow_data)
-
-        logger.info(f"Workflow '{workflow_data['name']}' created successfully")
-        return result
-
-    @ErrorManager.operation_context("workflow_deletion")
-    def workflow_delete(self, workflow_id: str) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
-
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.delete_workflow(session, workflow_id)
-
-        logger.info(f"Workflow {workflow_id} deleted successfully")
-        return result
-    
-    @ErrorManager.operation_context("workflow_update")
-    def workflow_update(self, workflow_id: str, workflow_data: dict) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
-
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.update_workflow(session, workflow_id, workflow_data)
-
-        logger.info(f"Workflow {workflow_id} updated successfully")
-        return result
-
-    @ErrorManager.operation_context("workflow_listing")
-    def workflow_list(self, page: Optional[int] = None, page_size: Optional[int] = None) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-
-        with self.db_engine.get_session_context() as session:
-            return self.orchestration.get_workflows(session, page, page_size)
-
-    @ErrorManager.operation_context("workflow_retrieval")
-    def workflow_get(self, workflow_id: str) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
-
-        with self.db_engine.get_session_context() as session:
-            return self.orchestration.get_workflow(session, workflow_id)
-    
-    # EXECUTION METOTLARI 
-    # ===========================================================
-    @ErrorManager.operation_context("trigger_workflow")
-    def trigger_workflow(self, workflow_id: str) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
-    
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.trigger_workflow(session, workflow_id)
-        
-        logger.info(f"Workflow {workflow_id} triggered successfully")
-        return result
-    
-    @ErrorManager.operation_context("execution_cancellation")
-    def cancel_execution(self, execution_id: str) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not execution_id:
-            raise ValidationError("Execution ID is required", "Provide valid execution ID")
-        
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.cancel_execution(session, execution_id)
-        
-        logger.info(f"Execution {execution_id} cancelled successfully")
-        return result
-    
-    @ErrorManager.operation_context("execution_retrieval")
-    def execution_get(self, execution_id: str) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not execution_id:
-            raise ValidationError("Execution ID is required", "Provide valid execution ID")
-        
-        with self.db_engine.get_session_context() as session:
-            result = self.orchestration.get_execution(session, execution_id)
-        
-        logger.info(f"Execution {execution_id} retrieved successfully")
-        return result
-
-    @ErrorManager.operation_context("execution_listing")
-    def execution_list(self, page: Optional[int] = None, page_size: Optional[int] = None) -> dict:
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        with self.db_engine.get_session_context() as session:
-            result =  self.orchestration.get_executions(session, page, page_size)
-        
-        logger.info(f"Executions listed successfully")
-        return result
-
-    @ErrorManager.operation_context("execution_listing_by_workflow")
-    def execution_list_by_workflow(self, workflow_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> list:
-        """Get all executions for a specific workflow"""
-        ErrorManager.validate_engine_state(self.db_engine)
-        
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required", "Provide valid workflow ID")
-        
-        with self.db_engine.get_session_context() as session:
-            executions = self.orchestration.execution_crud.get_executions_by_workflow(session, workflow_id)
-            
-            # Convert to list of dictionaries with consistent field names
-            result = []
-            for execution in executions:
-                exec_dict = {
-                    'execution_id': execution.id,  # Use execution_id for consistency
-                    'workflow_id': execution.workflow_id,
-                    'status': execution.status.value if hasattr(execution.status, 'value') else execution.status,
-                    'started_at': execution.started_at.isoformat() if execution.started_at else None,
-                    'ended_at': execution.ended_at.isoformat() if execution.ended_at else None,
-                    'created_at': execution.created_at.isoformat() if execution.created_at else None,
-                    'updated_at': execution.updated_at.isoformat() if execution.updated_at else None
-                }
-                result.append(exec_dict)
-        
-        logger.info(f"Retrieved {len(result)} executions for workflow {workflow_id}")
-        return result
-
-    # HEALTH CHECK METHOD
-    # ===========================================================
     def health_check(self) -> dict:
         """
         System health check - returns status of all components
+        NOTE: For detailed business operations, use Service layer via FastAPI endpoints
         """
         try:
             components = {
@@ -497,7 +285,8 @@ class MiniflowCore:
                 "status": "healthy" if all_healthy else "unhealthy",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "components": components,
-                "ready_tasks": self._get_ready_task_count() if all_healthy else -1
+                "ready_tasks": self._get_ready_task_count() if all_healthy else -1,
+                "note": "For business operations (scripts, workflows, executions), use FastAPI endpoints /api/v1/..."
             }
             
         except Exception as e:
@@ -507,95 +296,7 @@ class MiniflowCore:
                 "error": str(e),
                 "components": {}
             }
-        
-    # API SERVER METHODS
-    # ===========================================================
-    @ErrorManager.operation_context("api_server_startup")
-    def start_api_server(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> None:
-        """Start the Miniflow API server"""
-        try:
-            import uvicorn
-            from .api import app
-            
-            logger.info(f"Starting Miniflow API Server at {host}:{port}")
-            logger.info(f"API Documentation available at: http://{host}:{port}/docs")
-            logger.info(f"Health Check available at: http://{host}:{port}/health")
-            
-            if self.enable_scheduler:
-                logger.info("Scheduler is enabled - workflows will be automatically executed")
-            else:
-                logger.info("Scheduler is disabled - workflows must be executed manually")
-            
-            uvicorn.run(
-                app,
-                host=host,
-                port=port,
-                reload=reload,
-                log_level="info"
-            )
-            
-        except ImportError as e:
-            raise ResourceError(
-                "API dependencies missing",
-                "Install required packages: pip install fastapi uvicorn"
-            ) from e
 
-
-
-
-
-    # DEMONSTRATION AND TESTING METHODS
-    # ===========================================================
-    
-    def demo_workflow_execution(self) -> dict:
-        """
-        Demonstration method showing complete workflow execution with scheduler
-        Creates a simple workflow and shows the execution flow
-        """
-        try:
-            ErrorManager.validate_engine_state(self.db_engine)
-            
-            if not self.enable_scheduler:
-                return {
-                    "status": "error",
-                    "message": "Scheduler must be enabled for automatic workflow execution",
-                    "suggestion": "Initialize MiniflowCore with enable_scheduler=True"
-                }
-            
-            logger.info("Starting workflow execution demonstration...")
-            
-            # Check if required components are running
-            health = self.health_check()
-            if health["status"] != "healthy":
-                return {
-                    "status": "error", 
-                    "message": "System is not healthy",
-                    "health_status": health
-                }
-            
-            return {
-                "status": "ready",
-                "message": "System is ready for workflow execution",
-                "next_steps": [
-                    "1. Create a script using script_create()",
-                    "2. Create a workflow using workflow_create()",
-                    "3. Trigger workflow using trigger_workflow()",
-                    "4. Monitor execution with execution_get() or health_check()"
-                ],
-                "components": {
-                    "database": "✓ Connected",
-                    "parallelism_engine": "✓ Running",
-                    "scheduler": "✓ Active (Input & Output monitors running)",
-                    "ready_tasks": self._get_ready_task_count()
-                }
-            }
-            
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": f"Demo execution failed: {str(e)}"
-            }
-    
     def _get_ready_task_count(self) -> int:
         """Helper method to get count of ready tasks"""
         try:
@@ -603,3 +304,40 @@ class MiniflowCore:
                 return self.orchestration.execution_input_crud.count_ready_tasks(session)
         except:
             return -1
+
+    # API SERVER METHODS
+    # ===========================================================
+    @ErrorManager.operation_context("api_server_startup")
+    def start_api_server(self, host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> None:
+        """
+        Start the Miniflow API server
+        
+        NOTE: This method starts the FastAPI server. All business operations
+        (scripts, workflows, nodes, edges, executions) should be done through
+        the API endpoints, not through direct MiniflowCore methods.
+        """
+        try:
+            import uvicorn
+            from .app.main import app
+            
+            logger.info(f"Starting Miniflow API server on {host}:{port}")
+            logger.info("🌐 API Documentation: http://127.0.0.1:8000/docs")
+            logger.info("📊 Health Check: http://127.0.0.1:8000/health")
+            logger.info("🔧 All business operations available via /api/v1/ endpoints")
+            
+            uvicorn.run(
+                app=app,
+                host=host,
+                port=port,
+                reload=reload,
+                log_level="info"
+            )
+            
+        except ImportError:
+            raise EngineError(
+                "uvicorn not installed",
+                "Install uvicorn to run the API server: pip install uvicorn"
+            )
+        except Exception as e:
+            logger.error(f"Failed to start API server: {e}")
+            raise EngineError(f"API server startup failed: {str(e)}") from e

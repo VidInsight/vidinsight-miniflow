@@ -30,14 +30,43 @@ def delete_script(scripts_dir: str, script_name: str):
 
 def extract_dynamic_node_params(node_params):
     pattern = r"\{\{(.*?)\}\}"
-    extract_dynamic_node_params = {}
+    dynamic_params = {}
 
     for key, value in node_params.items():
         if isinstance(value, str):
             match = re.search(pattern, value)
             if match:
-                extract_dynamic_node_params[key] = match.group(1).strip()
-    return extract_dynamic_node_params
+                content = match.group(1).strip()
+                # Skip environment variables (those starting with $)
+                if not content.startswith('$'):
+                    dynamic_params[key] = content
+    return dynamic_params
+
+def extract_env_var_params(node_params):
+    """
+    Extract environment variable references from node parameters
+    Supports formats: 
+    - {{env:variable_name}} (new preferred format)
+    - {{$variable_name}} (legacy format)
+    Returns dict of param_key -> env_var_name mappings
+    """
+    env_params = {}
+
+    for key, value in node_params.items():
+        if isinstance(value, str):
+            # Try new format first: {{env:variable_name}}
+            pattern_new = r"\{\{env:([A-Za-z_][A-Za-z0-9_]*)\}\}"
+            match = re.search(pattern_new, value)
+            if match:
+                env_params[key] = match.group(1).strip()
+                continue
+                
+            # Fallback to legacy format: {{$variable_name}}
+            pattern_legacy = r"\{\{\$([A-Za-z_][A-Za-z0-9_]*)\}\}"
+            match = re.search(pattern_legacy, value)
+            if match:
+                env_params[key] = match.group(1).strip()
+    return env_params
 
 def split_variable_reference(variable_reference):
     variable_parts = variable_reference.strip().split('.')

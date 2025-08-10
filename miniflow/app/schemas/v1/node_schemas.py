@@ -19,9 +19,9 @@ class NodeSummary(BaseModel):
 class NodeCreateRequest(BaseModel):
     """Node oluşturma request modeli - database models'a uygun"""
     workflow_id: str
+    script_id: str
     name: str
-    script_id: Optional[str] = None
-    params: Optional[Dict[str, Any]] = {}
+    params: Dict[str, Any]
     max_retries: Optional[int] = 3
     timeout_seconds: Optional[int] = 300
 

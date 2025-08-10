@@ -17,6 +17,14 @@ class EdgeSummary(BaseModel):
     to_node_id: str
     condition_type: ConditionTypeSchema
 
+class EdgeDetail(EdgeSummary):
+    """Edge detay bilgileri"""
+    from_node_name: Optional[str] = None
+    to_node_name: Optional[str] = None
+    workflow_name: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 # =====================================================================================================  EDGE CREATE  ==
 # REQUEST SCHEMAS
 class EdgeCreateRequest(BaseModel):
@@ -88,7 +96,7 @@ class EdgeListResponse(ListResponse):
 # RESPONSE SCHEMAS
 class EdgeDetailResponse(DataResponse):
     """Edge detay response"""
-    data: EdgeSummary
+    data: EdgeDetail
 
 # ======================================================================================================  EDGE COUNT  ==
 # RESPONSE SCHEMAS

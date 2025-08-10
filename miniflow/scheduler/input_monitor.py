@@ -8,8 +8,8 @@ import time
 from miniflow.utils import setup_logging
 
 # Miniflow Database Module
-from miniflow.database_manager import DatabaseEngine
-from miniflow.database_manager import DatabaseOrchestration
+from miniflow.database import DatabaseEngine
+from miniflow.database import DatabaseOrchestration
 
 setup_logging()
 logger = logging.getLogger(__name__)

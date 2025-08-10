@@ -6,7 +6,8 @@ from miniflow.app.schemas.v1 import (
 )
 from miniflow.app.schemas.v1 import (
     ScriptListResponse, ScriptDetailResponse, ScriptCreateResponse, ScriptUpdateResponse,
-    ScriptDeleteResponse, ScriptTestResponse, ScriptSearchResponse, ScriptCountResponse, ScriptExistsResponse
+    ScriptDeleteResponse, ScriptTestResponse, ScriptSearchResponse, ScriptCountResponse, 
+    ScriptExistsResponse, ScriptValidateResponse
 )
 
 # Services
@@ -38,11 +39,11 @@ async def api_script_delete(script_id: str, force: bool = False, script_service:
     return ScriptDeleteResponse(**result)
 
 # ===================================================================================================  SCRIPT VALIDATE  ==
-@router.post("/{script_id}/validate", response_model=ScriptTestResponse)
+@router.post("/{script_id}/validate", response_model=ScriptValidateResponse)
 async def api_script_validate(script_id: str, script_service: ScriptService = Depends(get_script_service)):
     """Script'i doğrula"""
     result = await script_service.script_validate(script_id)
-    return ScriptTestResponse(**result)
+    return ScriptValidateResponse(**result)
 
 # =====================================================================================================  SCRIPT SEARCH  ==
 @router.post("/search", response_model=ScriptSearchResponse)
@@ -53,9 +54,15 @@ async def api_script_search(filter_data: ScriptSearchRequest, script_service: Sc
 
 # =======================================================================================================  SCRIPT LIST  ==
 @router.get("/", response_model=ScriptListResponse)
-async def api_script_list(script_service: ScriptService = Depends(get_script_service)):
+async def api_script_list(
+    language: str = None,
+    test_status: str = None,
+    page: int = None,
+    page_size: int = None,
+    script_service: ScriptService = Depends(get_script_service)
+):
     """Tüm script'leri listele"""
-    result = await script_service.script_list()
+    result = await script_service.script_list(language=language, test_status=test_status, page=page, page_size=page_size)
     return ScriptListResponse(**result)
 
 # ========================================================================================================  SCRIPT GET  ==
@@ -67,9 +74,12 @@ async def api_script_get(script_id: str, include_content: bool = Query(False), s
 
 # ======================================================================================================  SCRIPT COUNT  ==
 @router.get("/count", response_model=ScriptCountResponse)
-async def api_script_count(script_service: ScriptService = Depends(get_script_service)):
-    """Script sayısını getir"""
-    result = await script_service.script_count()
+async def api_script_count(
+    group_by: str = None,
+    script_service: ScriptService = Depends(get_script_service)
+):
+    """Script sayısını getir (total, by language, by test_status, etc.)"""
+    result = await script_service.script_count(group_by=group_by)
     return ScriptCountResponse(**result)
 
 # =====================================================================================================  SCRIPT EXISTS  ==
