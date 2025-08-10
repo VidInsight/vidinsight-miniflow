@@ -6,6 +6,8 @@ class ScriptSummary(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
+    input_params: Dict[str, Any] = {}
+    output_params: Dict[str, Any] = {}
     language: str
     script_path: str
     test_status: str
