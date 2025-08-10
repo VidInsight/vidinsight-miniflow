@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from typing import Optional
 
 # Request/Response Schemas
-from miniflow.app.schemas.v1 import (
-    WorkflowCreateRequest, WorkflowUpdateRequest, WorkflowSearchRequest, WorkflowCloneRequest
-)
-from miniflow.app.schemas.v1 import (
+from miniflow.app.schemas.v1.workflow_schemas import (
+    WorkflowCreateRequest, WorkflowUpdateRequest, WorkflowSearchRequest, WorkflowCloneRequest,
     WorkflowListResponse, WorkflowDetailResponse, WorkflowCreateResponse, WorkflowUpdateResponse,
     WorkflowDeleteResponse, WorkflowValidateResponse, WorkflowRunResponse, WorkflowCloneResponse,
-    WorkflowSearchResponse, WorkflowCountResponse, WorkflowExistsResponse, WorkflowDetail
+    WorkflowSearchResponse, WorkflowCountResponse, WorkflowExistsResponse
 )
 
 # Services
-from miniflow.app.services import WorkflowService
+from miniflow.app.services.workflow_service import WorkflowService
 from miniflow.app.dependencies import get_workflow_service
 
 
@@ -20,13 +19,16 @@ router = APIRouter()
 # =================================================================================================  WORKFLOW CREATE  ==
 @router.post("/create", response_model=WorkflowCreateResponse)
 async def api_workflow_create(workflow_data: WorkflowCreateRequest,workflow_service: WorkflowService = Depends(get_workflow_service)):
+    """Yeni workflow oluştur (nodes ve edges opsiyonel ama birlikte verilmeli)"""
+    
     result = await workflow_service.workflow_create(workflow_data.model_dump())
     return WorkflowCreateResponse(**result)
 
 # =================================================================================================  WORKFLOW UPDATE  ==
 @router.post("/{workflow_id}/update", response_model=WorkflowUpdateResponse)
 async def api_workflow_update(workflow_id: str,workflow_data: WorkflowUpdateRequest,workflow_service: WorkflowService = Depends(get_workflow_service)):
-    """Workflow'u güncelle"""
+    """Workflow'u güncelle (nodes ve edges opsiyonel ama birlikte verilmeli)"""
+    
     result = await workflow_service.workflow_update(workflow_id, workflow_data.model_dump(exclude_unset=True))
     return WorkflowUpdateResponse(**result)
 
@@ -67,23 +69,28 @@ async def api_workflow_clone(workflow_id: str,clone_data: WorkflowCloneRequest,w
 
 # ===================================================================================================  WORKFLOW LIST  ==
 @router.get("/", response_model=WorkflowListResponse)
-async def api_workflow_list(workflow_service: WorkflowService = Depends(get_workflow_service)):
+async def api_workflow_list(status: Optional[str] = None, is_active: Optional[bool] = None,
+                          page: Optional[int] = None, page_size: Optional[int] = None,
+                          workflow_service: WorkflowService = Depends(get_workflow_service)):
     """Tüm workflow'ları listele"""
-    result = await workflow_service.workflow_list()
+    result = await workflow_service.workflow_list(status=status, is_active=is_active, 
+                                                  page=page, page_size=page_size)
     return WorkflowListResponse(**result)
 
 # ====================================================================================================  WORKFLOW GET  ==
 @router.get("/{workflow_id}", response_model=WorkflowDetailResponse)
-async def api_workflow_get(workflow_id: str, workflow_service: WorkflowService = Depends(get_workflow_service)):
+async def api_workflow_get(workflow_id: str, include_nodes: bool = False, include_edges: bool = False,
+                          workflow_service: WorkflowService = Depends(get_workflow_service)):
     """Workflow detaylarını getir"""
-    result = await workflow_service.workflow_get(workflow_id)
+    result = await workflow_service.workflow_get(workflow_id, include_nodes=include_nodes, include_edges=include_edges)
     return WorkflowDetailResponse(**result)
 
 # ==================================================================================================  WORKFLOW COUNT  ==
 @router.get("/count", response_model=WorkflowCountResponse)
-async def api_workflow_count(workflow_service: WorkflowService = Depends(get_workflow_service)):
+async def api_workflow_count(group_by: Optional[str] = None,
+                           workflow_service: WorkflowService = Depends(get_workflow_service)):
     """Workflow sayısını getir"""
-    result = await workflow_service.workflow_count()
+    result = await workflow_service.workflow_count(group_by=group_by)
     return WorkflowCountResponse(**result)
 
 # =================================================================================================  WORKFLOW EXISTS  ==

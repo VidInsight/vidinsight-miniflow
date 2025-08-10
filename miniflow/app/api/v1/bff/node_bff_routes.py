@@ -5,7 +5,7 @@ from miniflow.app.schemas.v1 import (
     NodeCreateRequest, NodeUpdateRequest, NodeSearchRequest
 )
 from miniflow.app.schemas.v1 import (
-    NodeListResponse, NodeDetailResponse, NodeCreateResponse, NodeUpdateResponse,
+    NodeListResponse, NodeSummary, NodeCreateResponse, NodeUpdateResponse,
     NodeDeleteResponse, NodeValidateResponse, NodeSearchResponse, NodeCountResponse, NodeExistsResponse
 )
 
@@ -53,23 +53,31 @@ async def api_node_search(filter_data: NodeSearchRequest, node_service: NodeServ
 
 # =======================================================================================================  NODE LIST  ==
 @router.get("/", response_model=NodeListResponse)
-async def api_node_list(node_service: NodeService = Depends(get_node_service)):
-    """Tüm node'ları listele"""
-    result = await node_service.node_list()
+async def api_node_list(
+    workflow_id: str = None,
+    page: int = None, 
+    page_size: int = None,
+    node_service: NodeService = Depends(get_node_service)
+):
+    """Tüm node'ları listele veya belirli bir workflow'un node'larını listele"""
+    result = await node_service.node_list(workflow_id=workflow_id, page=page, page_size=page_size)
     return NodeListResponse(**result)
 
 # ========================================================================================================  NODE GET  ==
-@router.get("/{node_id}", response_model=NodeDetailResponse)
+@router.get("/{node_id}", response_model=NodeSummary)
 async def api_node_get(node_id: str, node_service: NodeService = Depends(get_node_service)):
     """Node detaylarını getir"""
     result = await node_service.node_get(node_id)
-    return NodeDetailResponse(**result)
+    return NodeSummary(**result)
 
 # ======================================================================================================  NODE COUNT  ==
 @router.get("/count", response_model=NodeCountResponse)
-async def api_node_count(node_service: NodeService = Depends(get_node_service)):
-    """Node sayısını getir"""
-    result = await node_service.node_count()
+async def api_node_count(
+    workflow_id: str = None,
+    node_service: NodeService = Depends(get_node_service)
+):
+    """Node sayısını getir (total veya workflow bazlı)"""
+    result = await node_service.node_count(workflow_id=workflow_id)
     return NodeCountResponse(**result)
 
 # =====================================================================================================  NODE EXISTS  ==

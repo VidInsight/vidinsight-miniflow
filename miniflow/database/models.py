@@ -268,7 +268,6 @@ class EnvironmentVariable(BaseModel):
     name = Column(String(100), nullable=False, unique=True)
     value = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    is_sensitive = Column(Boolean, default=False, nullable=False)
 
     def __repr__(self) -> str:
         return f"<EnvironmentVariable(name={self.name}, value={self.value})>"

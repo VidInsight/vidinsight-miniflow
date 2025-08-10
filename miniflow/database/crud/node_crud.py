@@ -30,3 +30,16 @@ class NodeCRUD(BaseCRUD[Node], AuditMixin):
     def count_by_workflow(self, session: Session, workflow_id: str) -> int:
         """Count nodes in a specific workflow."""
         return session.query(self.model).filter(self.model.workflow_id == workflow_id).count()
+
+    def get_nodes_by_workflow(self, session: Session, workflow_id: str) -> List[Node]:
+        """Get all nodes for a specific workflow."""
+        return self.filter(session, {'workflow_id': workflow_id})
+
+    def get_by_name_and_workflow(self, session: Session, name: str, workflow_id: str) -> Optional[Node]:
+        """Find node by name within a specific workflow."""
+        nodes = self.filter(session, {'name': name, 'workflow_id': workflow_id})
+        return nodes[0] if nodes else None
+
+    def search_nodes(self, session: Session, **search_criteria) -> List[Node]:
+        """Search nodes based on criteria - alias for filter method."""
+        return self.filter(session, search_criteria)

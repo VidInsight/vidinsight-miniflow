@@ -45,3 +45,25 @@ class EdgeCRUD(BaseCRUD[Edge]):
         """
         stmt = select(func.count(self.model.id)).where(self.model.to_node_id == node_id)
         return session.execute(stmt).scalar_one() or 0
+
+    def get_edges_to_node(self, session: Session, node_id: str) -> List[Edge]:
+        """Get all edges that point to a specific node (incoming edges)."""
+        return self.filter(session, {'to_node_id': node_id})
+
+    def get_edges_from_node(self, session: Session, node_id: str) -> List[Edge]:
+        """Get all edges that originate from a specific node (outgoing edges)."""
+        return self.filter(session, {'from_node_id': node_id})
+
+    def count_by_workflow(self, session: Session, workflow_id: str) -> int:
+        """Count edges in a specific workflow."""
+        edges = self.get_edges_by_workflow(session, workflow_id)
+        return len(edges)
+
+    def search_edges(self, session: Session, **search_criteria) -> List[Edge]:
+        """Search edges based on criteria - alias for filter method."""
+        return self.filter(session, search_criteria)
+
+    def check_edge_exists(self, session: Session, from_node_id: str, to_node_id: str) -> bool:
+        """Check if an edge already exists between two nodes."""
+        edges = self.filter(session, {'from_node_id': from_node_id, 'to_node_id': to_node_id})
+        return len(edges) > 0

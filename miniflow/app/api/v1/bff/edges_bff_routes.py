@@ -32,9 +32,9 @@ async def api_edge_update(edge_id: str, edge_data: EdgeUpdateRequest, edge_servi
 
 # =====================================================================================================  EDGE DELETE  ==
 @router.post("/{edge_id}/delete", response_model=EdgeDeleteResponse)
-async def api_edge_delete(edge_id: str, force: bool = False, edge_service: EdgeService = Depends(get_edge_service)):
+async def api_edge_delete(edge_id: str, edge_service: EdgeService = Depends(get_edge_service)):
     """Edge'i sil"""
-    result = await edge_service.edge_delete(edge_id, force)
+    result = await edge_service.edge_delete(edge_id)
     return EdgeDeleteResponse(**result)
 
 # ===================================================================================================  EDGE VALIDATE  ==
@@ -53,9 +53,14 @@ async def api_edge_search(filter_data: EdgeSearchRequest, edge_service: EdgeServ
 
 # =======================================================================================================  EDGE LIST  ==
 @router.get("/", response_model=EdgeListResponse)
-async def api_edge_list(edge_service: EdgeService = Depends(get_edge_service)):
-    """Tüm edge'leri listele"""
-    result = await edge_service.edge_list()
+async def api_edge_list(
+    workflow_id: str = None,
+    page: int = None, 
+    page_size: int = None,
+    edge_service: EdgeService = Depends(get_edge_service)
+):
+    """Tüm edge'leri listele veya belirli bir workflow'un edge'lerini listele"""
+    result = await edge_service.edge_list(workflow_id=workflow_id, page=page, page_size=page_size)
     return EdgeListResponse(**result)
 
 # ========================================================================================================  EDGE GET  ==
@@ -67,9 +72,12 @@ async def api_edge_get(edge_id: str, edge_service: EdgeService = Depends(get_edg
 
 # ======================================================================================================  EDGE COUNT  ==
 @router.get("/count", response_model=EdgeCountResponse)
-async def api_edge_count(edge_service: EdgeService = Depends(get_edge_service)):
-    """Edge sayısını getir"""
-    result = await edge_service.edge_count()
+async def api_edge_count(
+    workflow_id: str = None,
+    edge_service: EdgeService = Depends(get_edge_service)
+):
+    """Edge sayısını getir (total veya workflow bazlı)"""
+    result = await edge_service.edge_count(workflow_id=workflow_id)
     return EdgeCountResponse(**result)
 
 # =====================================================================================================  EDGE EXISTS  ==

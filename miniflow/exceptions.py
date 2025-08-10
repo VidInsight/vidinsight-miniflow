@@ -8,10 +8,11 @@ logger = logging.getLogger(__name__)
 
 class MiniflowException(Exception):
     """Ana exception sınıfı"""
-    def __init__(self, message: str, error_code: str = None, details: str = None):
+    def __init__(self, message: str, error_code: str = None, details: str = None, status_code: int = 500):
         self.message = message
         self.error_code = error_code or "GENERAL_ERROR"
         self.details = details
+        self.status_code = status_code
 
 
 class DatabaseError(MiniflowException):
@@ -102,6 +103,33 @@ class ErrorManager:
         return 500
 
     @staticmethod
+    def create_error_response(error: MiniflowException, request_id: str = None, endpoint: str = None) -> Dict[str, Any]:
+        """Create standardized error response"""
+        return {
+            "status": False,
+            "timestamp": datetime.utcnow().isoformat() + "Z", 
+            "error_code": error.error_code,
+            "message": error.message,
+            "details": error.details,
+            "request_id": request_id,
+            "endpoint": endpoint
+        }
+
+    @staticmethod
+    def handle_unexpected_error(error: Exception, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Handle unexpected exceptions and return standardized error response"""
+        logger.error(f"Unexpected error: {str(error)}", exc_info=True)
+        
+        return {
+            "status": False,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "error_code": "INTERNAL_ERROR",
+            "message": "Beklenmeyen bir hata oluştu",
+            "details": "Sistem yöneticisiyle iletişime geçin",
+            "context": context
+        }
+
+    @staticmethod  
     def exception_to_error_response(exception: MiniflowException) -> Dict[str, Any]:
         """MiniflowException'ı ErrorResponse formatına çevir"""
         return create_error_response(exception)

@@ -7,7 +7,6 @@ class EnvVarSummary(BaseModel):
     name: str
     value: str
     description: Optional[str] = None
-    is_encrypted: bool = False
 
 # =====================================================================================================  ENV VAR CREATE  ==
 # REQUEST SCHEMA
@@ -16,14 +15,12 @@ class EnvVarCreateRequest(BaseModel):
     name: str
     value: str
     description: Optional[str] = None
-    is_encrypted: bool = False
 
 # RESPONSE SCHEMA
 class EnvVarCreateResponse(BaseResponse):
     """Environment Variable oluşturma response"""
     env_var_id: str
     name: str
-    is_encrypted: bool
     created_at: datetime
 
 # =====================================================================================================  ENV VAR UPDATE  ==
@@ -33,7 +30,6 @@ class EnvVarUpdateRequest(BaseModel):
     name: Optional[str] = None
     value: Optional[str] = None
     description: Optional[str] = None
-    is_encrypted: Optional[bool] = None
 
 # RESPONSE SCHEMA
 class EnvVarUpdateResponse(BaseResponse):
@@ -64,7 +60,6 @@ class EnvVarSearchRequest(BaseModel):
     """Environment Variable arama/filtreleme request modeli"""
     name: Optional[str] = None
     description: Optional[str] = None
-    is_encrypted: Optional[bool] = None
 
 # RESPONSE SCHEMA
 class EnvVarSearchResponse(ListResponse):

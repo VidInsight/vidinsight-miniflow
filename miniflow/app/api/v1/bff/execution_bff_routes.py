@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends
 
 # Request/Response Schemas
 from miniflow.app.schemas.v1 import (
-    ExecutionSearchRequest, ExecutionCancelRequest
+    ExecutionSearchRequest
 )
 from miniflow.app.schemas.v1 import (
     ExecutionListResponse, ExecutionDetailResponse, ExecutionResultsResponse,
     ExecutionStatusResponse, ExecutionCancelResponse, ExecutionSearchResponse, 
     ExecutionCountResponse, ExecutionExistsResponse
 )
+from miniflow.app.schemas.v1.base_schemas import BaseResponse
 
 # Services
 from miniflow.app.services import ExecutionService
@@ -18,32 +19,32 @@ from miniflow.app.dependencies import get_execution_service
 router = APIRouter()
 
 # ===================================================================================================  EXECUTION CREATE  ==
-@router.post("/create", response_model=ExecutionDetailResponse)
+@router.post("/create", response_model=BaseResponse)
 async def api_execution_create(execution_data: dict, execution_service: ExecutionService = Depends(get_execution_service)):
     """Yeni execution oluştur"""
     result = await execution_service.execution_create(execution_data)
-    return ExecutionDetailResponse(**result)
+    return BaseResponse(**result)
 
 # ===================================================================================================  EXECUTION UPDATE  ==
-@router.post("/{execution_id}/update", response_model=ExecutionDetailResponse)
+@router.post("/{execution_id}/update", response_model=BaseResponse)
 async def api_execution_update(execution_id: str, execution_data: dict, execution_service: ExecutionService = Depends(get_execution_service)):
     """Execution'ı güncelle"""
     result = await execution_service.execution_update(execution_id, execution_data)
-    return ExecutionDetailResponse(**result)
+    return BaseResponse(**result)
 
 # ===================================================================================================  EXECUTION DELETE  ==
-@router.post("/{execution_id}/delete", response_model=ExecutionCancelResponse)
+@router.post("/{execution_id}/delete", response_model=BaseResponse)
 async def api_execution_delete(execution_id: str, force: bool = False, execution_service: ExecutionService = Depends(get_execution_service)):
     """Execution'ı sil"""
     result = await execution_service.execution_delete(execution_id, force)
-    return ExecutionCancelResponse(**result)
+    return BaseResponse(**result)
 
 # =================================================================================================  EXECUTION VALIDATE  ==
-@router.post("/{execution_id}/validate", response_model=ExecutionStatusResponse)
+@router.post("/{execution_id}/validate", response_model=BaseResponse)
 async def api_execution_validate(execution_id: str, execution_service: ExecutionService = Depends(get_execution_service)):
     """Execution'ı doğrula"""
     result = await execution_service.execution_validate(execution_id)
-    return ExecutionStatusResponse(**result)
+    return BaseResponse(**result)
 
 # ===================================================================================================  EXECUTION SEARCH  ==
 @router.post("/search", response_model=ExecutionSearchResponse)
@@ -54,23 +55,36 @@ async def api_execution_search(filter_data: ExecutionSearchRequest, execution_se
 
 # =====================================================================================================  EXECUTION LIST  ==
 @router.get("/", response_model=ExecutionListResponse)
-async def api_execution_list(execution_service: ExecutionService = Depends(get_execution_service)):
+async def api_execution_list(
+    workflow_id: str = None,
+    status: str = None,
+    page: int = None,
+    page_size: int = None,
+    execution_service: ExecutionService = Depends(get_execution_service)
+):
     """Tüm execution'ları listele"""
-    result = await execution_service.execution_list()
+    result = await execution_service.execution_list(workflow_id=workflow_id, status=status, page=page, page_size=page_size)
     return ExecutionListResponse(**result)
 
 # ======================================================================================================  EXECUTION GET  ==
 @router.get("/{execution_id}", response_model=ExecutionDetailResponse)
-async def api_execution_get(execution_id: str, execution_service: ExecutionService = Depends(get_execution_service)):
+async def api_execution_get(
+    execution_id: str, 
+    include_results: bool = False,
+    execution_service: ExecutionService = Depends(get_execution_service)
+):
     """Execution detaylarını getir"""
-    result = await execution_service.execution_get(execution_id)
+    result = await execution_service.execution_get(execution_id, include_results=include_results)
     return ExecutionDetailResponse(**result)
 
 # ====================================================================================================  EXECUTION COUNT  ==
 @router.get("/count", response_model=ExecutionCountResponse)
-async def api_execution_count(execution_service: ExecutionService = Depends(get_execution_service)):
-    """Execution sayısını getir"""
-    result = await execution_service.execution_count()
+async def api_execution_count(
+    group_by: str = None,
+    execution_service: ExecutionService = Depends(get_execution_service)
+):
+    """Execution sayısını getir (total, by status, by workflow, etc.)"""
+    result = await execution_service.execution_count(group_by=group_by)
     return ExecutionCountResponse(**result)
 
 # ===================================================================================================  EXECUTION EXISTS  ==
@@ -96,7 +110,7 @@ async def api_execution_status(execution_id: str, execution_service: ExecutionSe
 
 # =================================================================================================  EXECUTION CANCEL  ==
 @router.post("/{execution_id}/cancel", response_model=ExecutionCancelResponse)
-async def api_execution_cancel(execution_id: str, cancel_data: ExecutionCancelRequest, execution_service: ExecutionService = Depends(get_execution_service)):
+async def api_execution_cancel(execution_id: str, execution_service: ExecutionService = Depends(get_execution_service)):
     """Execution'ı iptal et"""
-    result = await execution_service.execution_cancel(execution_id, cancel_data.model_dump())
+    result = await execution_service.execution_cancel(execution_id)
     return ExecutionCancelResponse(**result)

@@ -49,7 +49,7 @@ class DatabaseEngine:
         self.__session_factory: Optional[sessionmaker] = None
 
         self.__connection_string: str = config.get_connection_string()
-        self.__engine_config: dict = config.engine_config.to_dict(config.db_type)
+        self.__engine_config: dict = config.engine_config.to_dict()
 
         self.is_alive: bool = False
 

@@ -69,6 +69,7 @@ __all__ = [
     "ScriptCreateResponse",
     "ScriptUpdateResponse",
     "ScriptDeleteResponse",
+    "ScriptValidateResponse",
     "ScriptTestResponse",
     "ScriptSearchResponse",
     "ScriptCountResponse",
@@ -76,9 +77,7 @@ __all__ = [
     
     # Execution schemas
     "ExecutionSearchRequest",
-    "ExecutionCancelRequest",
     "ExecutionSummary",
-    "ExecutionDetail",
     "ExecutionListResponse",
     "ExecutionDetailResponse",
     "ExecutionResultsResponse",
