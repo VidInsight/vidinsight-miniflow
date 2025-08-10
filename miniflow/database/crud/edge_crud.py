@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from .base_crud import BaseCRUD
 from ..models import Edge, Node
+from ..decorators.auditlog_decorators import audit_create, audit_update, audit_delete, AuditMixin
 
 
 class EdgeCRUD(BaseCRUD[Edge]):
@@ -11,25 +12,22 @@ class EdgeCRUD(BaseCRUD[Edge]):
     def __init__(self):
         super().__init__(Edge)
 
-    """
-    BaseCRUD'dan miras alınan fonksiyonlar:
-    ============================================================
-    - create()
-    - find_by_id()
-    - find_by_name() 
-    - update()
-    - delete()
-    - get_all()
-    - count(), 
-    - exists()
-    - filter() 
-    - order_by()
-    - select_in_bulk()
-    - truncate(),
-    - bulk_create()
-    - bulk_update()
-    - bulk_delete()
-    """
+        # ==================================================================================== BUSINESS METHODS ==
+
+    @audit_create("edges")
+    def create_edge(self, session: Session, **edge_data) -> Edge:
+        """Create new edge with audit logging."""
+        return super().create(session, **edge_data)
+
+    @audit_update("edges")
+    def update_edge(self, session: Session, edge_id: str, **edge_data) -> Edge:
+        """Update edge with audit logging."""
+        return super().update(session, edge_id, **edge_data)
+
+    @audit_delete("edges")
+    def delete_edge(self, session: Session, edge_id: str) -> Edge:
+        """Delete edge with audit logging."""
+        return super().delete(session, edge_id)
 
     def get_edges_by_workflow(self, session, workflow_id):
         from ..models import Node

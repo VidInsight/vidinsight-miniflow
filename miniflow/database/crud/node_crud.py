@@ -4,46 +4,29 @@ from sqlalchemy.orm import Session
 
 from .base_crud import BaseCRUD
 from ..models import Node
+from ..decorators.auditlog_decorators import audit_create, audit_update, audit_delete, AuditMixin
 
-
-class NodeCRUD(BaseCRUD[Node]):
+class NodeCRUD(BaseCRUD[Node], AuditMixin):
     
     def __init__(self):
         super().__init__(Node)
-    
-    """
-    BaseCRUD'dan miras alınan fonksiyonlar:
-    ============================================================
-    - create()
-    - find_by_id()
-    - find_by_name() 
-    - update()
-    - delete()
-    - get_all()
-    - count(), 
-    - exists()
-    - filter() 
-    - order_by()
-    - select_in_bulk()
-    - truncate(),
-    - bulk_create()
-    - bulk_update()
-    - bulk_delete()
-    """
 
-    def get_nodes_by_workflow(self, session: Session, workflow_id: str) -> List[Node]:
-        """Workflow'a ait node'ları getir"""
-        stmt = select(self.model).where(self.model.workflow_id == workflow_id)
-        return list(session.execute(stmt).scalars().all())
+    # ==================================================================================== BUSINESS METHODS ==
+    @audit_create("nodes")
+    def create_node(self, session: Session, **node_data) -> Node:
+        """Create new node with audit logging."""
+        return super().create(session, **node_data)
 
-    def get_nodes_by_script(self, session: Session, script_id: str) -> List[Node]:
-        """Script'e ait node'ları getir"""
-        stmt = select(self.model).where(self.model.script_id == script_id)
-        return list(session.execute(stmt).scalars().all())
+    @audit_update("nodes")
+    def update_node(self, session: Session, node_id: str, **node_data) -> Node:
+        """Update node with audit logging."""
+        return super().update(session, node_id, **node_data)
 
-    def get_by_name(self, session: Session, name: str, workflow_id: str):
-        stmt = select(self.model).where(
-            and_(self.model.name == name, self.model.workflow_id == workflow_id)
-        )
-        return session.execute(stmt).scalars().first()
+    @audit_delete("nodes")
+    def delete_node(self, session: Session, node_id: str) -> Node:
+        """Delete node with audit logging."""
+        return super().delete(session, node_id)
 
+    def count_by_workflow(self, session: Session, workflow_id: str) -> int:
+        """Count nodes in a specific workflow."""
+        return session.query(self.model).filter(self.model.workflow_id == workflow_id).count()
