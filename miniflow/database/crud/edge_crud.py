@@ -3,16 +3,14 @@ from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import Session
 
 from .base_crud import BaseCRUD
-from ..models import Edge, Node
+from ..models import Edge, Node, Workflow
 from ..decorators.auditlog_decorators import audit_create, audit_update, audit_delete, AuditMixin
 
 
-class EdgeCRUD(BaseCRUD[Edge]):
+class EdgeCRUD(BaseCRUD[Edge], AuditMixin):
     
     def __init__(self):
         super().__init__(Edge)
-
-        # ==================================================================================== BUSINESS METHODS ==
 
     @audit_create("edges")
     def create_edge(self, session: Session, **edge_data) -> Edge:
@@ -29,41 +27,36 @@ class EdgeCRUD(BaseCRUD[Edge]):
         """Delete edge with audit logging."""
         return super().delete(session, edge_id)
 
-    def get_edges_by_workflow(self, session, workflow_id):
-        from ..models import Node
-        from sqlalchemy import select
-        node_ids = [node.id for node in session.query(Node).filter_by(workflow_id=workflow_id).all()]
-        stmt = select(self.model).where(
-            (self.model.from_node_id.in_(node_ids)) | (self.model.to_node_id.in_(node_ids))
-        )
-        return list(session.execute(stmt).scalars().all())
+    def get_by_workflow(self, session: Session, workflow_id: str) -> List[Workflow]:
+        return self.filter(session, {'workflow_id': workflow_id})
 
-    def get_dependency_count(self, session: Session, node_id: str) -> int:
+    def count_dependencies(self, session: Session, node_id: str) -> int:
         """
         Bir node'un kaç başka node'a bağımlı olduğunu hesapla
         (kaç edge'in to_node_id'si bu node'a eşit)
         """
-        stmt = select(func.count(self.model.id)).where(self.model.to_node_id == node_id)
-        return session.execute(stmt).scalar_one() or 0
+        return self.count_filtered(session, {"to_node_id": node_id})
 
-    def get_edges_to_node(self, session: Session, node_id: str) -> List[Edge]:
-        """Get all edges that point to a specific node (incoming edges)."""
-        return self.filter(session, {'to_node_id': node_id})
-
-    def get_edges_from_node(self, session: Session, node_id: str) -> List[Edge]:
-        """Get all edges that originate from a specific node (outgoing edges)."""
-        return self.filter(session, {'from_node_id': node_id})
+    def count_dependants(self, session: Session, node_id: str) -> int:
+        """
+        Bir node'a kaç başka node'un bağımlı olduğunu hesapla
+        (kaç edge'in from_node_id'si bu node'a eşit)
+        """
+        return self.count_filtered(session, {"from_node_id": node_id})
 
     def count_by_workflow(self, session: Session, workflow_id: str) -> int:
-        """Count edges in a specific workflow."""
-        edges = self.get_edges_by_workflow(session, workflow_id)
-        return len(edges)
+        return self.count_filtered(session, {"workflow_id": workflow_id})
 
-    def search_edges(self, session: Session, **search_criteria) -> List[Edge]:
-        """Search edges based on criteria - alias for filter method."""
-        return self.filter(session, search_criteria)
+    def get_dependencies(self, session: Session, node_id: str) -> List[Node]:
+        return self.filter(session, {'to_node_id': node_id})
 
-    def check_edge_exists(self, session: Session, from_node_id: str, to_node_id: str) -> bool:
-        """Check if an edge already exists between two nodes."""
-        edges = self.filter(session, {'from_node_id': from_node_id, 'to_node_id': to_node_id})
-        return len(edges) > 0
+    def get_dependants(self, session: Session, node_id: str) -> List[Node]:
+        return self.filter(session, {'from_node_id': node_id})
+
+    def check_edge_exists(self, session: Session, workflow_id: str, from_node_id: str, to_node_id: str) -> bool:
+        """Check if an edge already exists between two nodes in a workflow"""
+        return self.count_filtered(session, {
+            'workflow_id': workflow_id,
+            'from_node_id': from_node_id,
+            'to_node_id': to_node_id
+        }) > 0
