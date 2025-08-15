@@ -155,3 +155,8 @@ class WorkflowOrchestrator(BaseOrchestration):
         
         updated_workflow = self.workflow_crud.set_priority(session, workflow_id, priority)
         return updated_workflow.to_dict()
+
+    def get_all_workflows(self, session: Session) -> List[Dict[str, Any]]:
+        """ Get all workflows """
+        workflows = self.workflow_crud.get_all(session)
+        return [workflow.to_dict() for workflow in workflows]
