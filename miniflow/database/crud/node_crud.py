@@ -11,7 +11,6 @@ class NodeCRUD(BaseCRUD[Node], AuditMixin):
     def __init__(self):
         super().__init__(Node)
 
-    # ==================================================================================== BUSINESS METHODS ==
     @audit_create("nodes")
     def create_node(self, session: Session, **node_data) -> Node:
         """Create new node with audit logging."""
@@ -27,19 +26,14 @@ class NodeCRUD(BaseCRUD[Node], AuditMixin):
         """Delete node with audit logging."""
         return super().delete(session, node_id)
 
-    def count_by_workflow(self, session: Session, workflow_id: str) -> int:
-        """Count nodes in a specific workflow."""
-        return session.query(self.model).filter(self.model.workflow_id == workflow_id).count()
-
-    def get_nodes_by_workflow(self, session: Session, workflow_id: str) -> List[Node]:
+    def get_by_workflow(self, session: Session, workflow_id: str) -> List[Node]:
         """Get all nodes for a specific workflow."""
         return self.filter(session, {'workflow_id': workflow_id})
 
-    def get_by_name_and_workflow(self, session: Session, name: str, workflow_id: str) -> Optional[Node]:
-        """Find node by name within a specific workflow."""
-        nodes = self.filter(session, {'name': name, 'workflow_id': workflow_id})
-        return nodes[0] if nodes else None
+    def get_by_script(self, session: Session, script_id: str) -> List[Node]:
+        """Get all nodes for a specific script."""
+        return self.filter(session, {'script_id': script_id})
 
-    def search_nodes(self, session: Session, **search_criteria) -> List[Node]:
-        """Search nodes based on criteria - alias for filter method."""
-        return self.filter(session, search_criteria)
+    def node_name_exists_in_workflow(self, session: Session, name: str, workflow_id: str) -> bool:
+        """Check if a node name exists in the given workflow."""
+        return self.count_filtered(session, {'name': name, 'workflow_id': workflow_id}) > 0
