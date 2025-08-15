@@ -27,15 +27,21 @@ class WorkflowCRUD(BaseCRUD[Workflow], AuditMixin):
 
     def set_status(self, session: Session, workflow_id: str, new_status: WorkflowStatus) -> Workflow:
         workflow = self.find_by_id(session, workflow_id)
+        if not workflow:
+            raise ValueError(f"Workflow not found: {workflow_id}")
+        
         workflow.status = new_status
         session.flush()
         return workflow
 
-    def set_priority(self, session: Session, workflow_id: str, priority: int):
+    def set_priority(self, session: Session, workflow_id: str, priority: int) -> Workflow:
         if not 0 <= priority <= 10:
             raise ValueError("Priority must be between 0 and 10")
 
         workflow = self.find_by_id(session, workflow_id)
+        if not workflow:
+            raise ValueError(f"Workflow not found: {workflow_id}")
+            
         workflow.priority = priority
         session.flush()
         return workflow

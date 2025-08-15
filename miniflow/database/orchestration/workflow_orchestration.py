@@ -79,7 +79,7 @@ class WorkflowOrchestrator(BaseOrchestration):
             'has_more': (skip + limit) < total_count
         }
 
-    def get(self, session: Session, workflow_id: str, include_details) -> Dict[str, Any]:
+    def get(self, session: Session, workflow_id: str, include_details: bool) -> Dict[str, Any]:
         """ Get Workflow """
 
         # Validate target workflow via ID
@@ -112,22 +112,46 @@ class WorkflowOrchestrator(BaseOrchestration):
         """ Exists Workflow """
         return self.workflow_crud.exists(session, workflow_id)
 
-    def set_status_active(self, session: Session, workflow_id: str):
+    def set_status_active(self, session: Session, workflow_id: str) -> Dict[str, Any]:
         """ Set workflow status as ACTIVE """
-        return self.workflow_crud.set_priority(session, workflow_id, WorkflowStatus.ACTIVE)
+        # Validate target workflow via ID
+        workflow = self.workflow_crud.find_by_id(session, workflow_id)
+        if not workflow:
+            raise BusinessLogicError(f"Workflow not found: {workflow_id}")
+        
+        updated_workflow = self.workflow_crud.set_status(session, workflow_id, WorkflowStatus.ACTIVE)
+        return updated_workflow.to_dict()
 
-    def set_status_draft(self, session: Session, workflow_id: str):
+    def set_status_draft(self, session: Session, workflow_id: str) -> Dict[str, Any]:
         """ Set workflow status as DRAFT """
-        return self.workflow_crud.set_priority(session, workflow_id, WorkflowStatus.DRAFT)
+        # Validate target workflow via ID
+        workflow = self.workflow_crud.find_by_id(session, workflow_id)
+        if not workflow:
+            raise BusinessLogicError(f"Workflow not found: {workflow_id}")
+        
+        updated_workflow = self.workflow_crud.set_status(session, workflow_id, WorkflowStatus.DRAFT)
+        return updated_workflow.to_dict()
 
-    def get_active_workflows(self, session: Session) :
+    def get_active_workflows(self, session: Session) -> List[Dict[str, Any]]:
         """ Get workflows by status """
-        return self.workflow_crud.filter(session, {"status": WorkflowStatus.ACTIVE})
+        workflows = self.workflow_crud.filter(session, {"status": WorkflowStatus.ACTIVE})
+        return [workflow.to_dict() for workflow in workflows]
 
-    def get_draft_workflows(self, session: Session) :
+    def get_draft_workflows(self, session: Session) -> List[Dict[str, Any]]:
         """ Get workflows by status """
-        return self.workflow_crud.filter(session, {"status": WorkflowStatus.DRAFT})
+        workflows = self.workflow_crud.filter(session, {"status": WorkflowStatus.DRAFT})
+        return [workflow.to_dict() for workflow in workflows]
 
-    def set_priority(self, session: Session, workflow_id: str, priority: int) :
-        """ Set workflow status """
-        return self.workflow_crud.set_status(session, workflow_id, priority)
+    def set_priority(self, session: Session, workflow_id: str, priority: int) -> Dict[str, Any]:
+        """ Set workflow priority """
+        # Validate priority range
+        if not isinstance(priority, int) or not 0 <= priority <= 10:
+            raise ValidationError(f"Priority must be an integer between 0 and 10, got: {priority}")
+        
+        # Validate target workflow via ID
+        workflow = self.workflow_crud.find_by_id(session, workflow_id)
+        if not workflow:
+            raise BusinessLogicError(f"Workflow not found: {workflow_id}")
+        
+        updated_workflow = self.workflow_crud.set_priority(session, workflow_id, priority)
+        return updated_workflow.to_dict()
