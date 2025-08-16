@@ -1,7 +1,7 @@
 from .workflow_crud import WorkflowCRUD
 from .node_crud import NodeCRUD
 from .edge_crud import EdgeCRUD
-from .env_var_crud import EnvironmentVariableCRUD
+from .envar_crud import EnvarCRUD
 from .script_crud import ScriptCRUD
 from .execution_crud import ExecutionCRUD
 from .execution_input_crud import ExecutionInputCRUD
@@ -14,7 +14,7 @@ __all__ = [
     "WorkflowCRUD",
     "NodeCRUD",
     "EdgeCRUD",
-    "EnvironmentVariableCRUD",
+    "EnvarCRUD",
     "ScriptCRUD",
     "ExecutionCRUD",
     "ExecutionInputCRUD",

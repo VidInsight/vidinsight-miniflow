@@ -1,67 +1,11 @@
-"""
-DATABASE CONFIGURATION MODULE
-==============================
-
-Bu modül Miniflow sisteminin farklı veritabanlarına bağlanabilmesi için gerekli 
-konfigrasyon sınıflarını ve factory fonksiyonlarını sağlar.
-
-MODÜL SORUMLULUKLARI:
-====================
-1. Database Type Definitions - Desteklenen veritabanı türleri
-2. Engine Configuration - SQLAlchemy engine ayarları
-3. Database Configuration - Connection string ve kimlik bilgileri
-4. Factory Functions - Kolay konfigrasyon oluşturma fonksiyonları
-
-DESTEKLENEN VERİTABANLARI:
-=========================
-• SQLite   - Embedded database, development ve test için ideal
-• MySQL    - Production web uygulamaları için popüler seçenek  
-• PostgreSQL - Enterprise uygulamalar için güçlü ve güvenilir
-
-CONFIGURATION HIERARCHY:
-=======================
-DatabaseConfig
-├── db_type: DatabaseType (enum)
-├── db_name: str (database adı)
-├── connection_info: host, port, username, password
-└── engine_config: EngineConfig
-    ├── pool_size: Connection pool boyutu
-    ├── pool_timeout: Connection timeout süresi
-    ├── isolation_level: Transaction isolation seviyesi
-    └── connect_args: DB-specific connection parametreleri
-
-USAGE EXAMPLES:
-==============
-```python
-# SQLite (development)
-config = get_sqlite_config(db_name="miniflow_dev")
-
-# PostgreSQL (production)
-config = get_postgresql_config(
-    db_name="miniflow_prod",
-    host="prod-db.company.com", 
-    username="miniflow_user",
-    password="secure_password"
-)
-
-# MySQL (staging)
-config = get_mysql_config(
-    db_name="miniflow_staging",
-    host="staging-db.company.com",
-    port=3306
-)
-```
-"""
-
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 from enum import Enum
 
-# =============================================================================
-# DATABASE TYPE DEFINITIONS
-# Desteklenen veritabanı türlerinin enum tanımları
-# =============================================================================
+from miniflow.exceptions import ValidationError
 
+
+# ===================================================================================================== DATABASE TYPE ==
 class DatabaseType(Enum):
     """
     Miniflow tarafından desteklenen veritabanı türleri
@@ -75,11 +19,8 @@ class DatabaseType(Enum):
     MYSQL = "mysql" 
     POSTGRESQL = "postgresql"
 
-# =============================================================================
-# ENGINE CONFIGURATION CLASS
-# SQLAlchemy engine için detaylı konfigrasyon ayarları
-# =============================================================================
 
+# ===================================================================================================== ENGINE CONFIG ==
 @dataclass
 class EngineConfig:
     """
@@ -108,22 +49,22 @@ class EngineConfig:
     """
     
     # Connection Pool Settings
-    pool_size: int = 10                    # Varsayılan connection pool boyutu
-    max_overflow: int = 20                 # Pool dolduğunda ekstra connection sayısı
-    pool_timeout: int = 30                 # Connection almak için maksimum bekleme süresi
-    pool_recycle: int = 3600              # Connection yenileme süresi (1 saat)
-    pool_pre_ping: bool = True            # Connection sağlık kontrolü aktif
+    pool_size: int = 10                                                 # Varsayılan connection pool boyutu
+    max_overflow: int = 20                                              # Pool dolduğunda ekstra connection sayısı
+    pool_timeout: int = 30                                              # Connection almak için maksimum bekleme süresi
+    pool_recycle: int = 3600                                            # Connection yenileme süresi (1 saat)
+    pool_pre_ping: bool = True                                          # Connection sağlık kontrolü aktif
 
     # Debug and Logging Settings
-    echo: bool = False                    # SQL query logging (production'da False)
-    echo_pool: bool = False               # Pool activity logging (debug için)
+    echo: bool = False                                                  # SQL query logging (production'da False)
+    echo_pool: bool = False                                             # Pool activity logging (debug için)
 
     # Session Management Settings  
-    autocommit: bool = False              # Manuel transaction control
-    autoflush: bool = True                # Otomatik flush aktif
-    expire_on_commit: bool = True         # Commit sonrası object refresh
-    isolation_level: Optional[str] = None # DB-specific isolation level
-    connect_args: Dict[str, Any] = field(default_factory=dict)  # Extra connection args
+    autocommit: bool = False                                            # Manuel transaction control
+    autoflush: bool = True                                              # Otomatik flush aktif
+    expire_on_commit: bool = True                                       # Commit sonrası object refresh
+    isolation_level: Optional[str] = None                               # DB-specific isolation level
+    connect_args: Dict[str, Any] = field(default_factory=dict)          # Extra connection args
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -158,11 +99,8 @@ class EngineConfig:
             'expire_on_commit': False
         }
 
-# =============================================================================
-# DATABASE CONFIGURATION CLASS
-# Ana database konfigrasyon sınıfı - connection bilgileri ve engine config
-# =============================================================================
 
+# =================================================================================================== DATABASE CONFIG ==
 @dataclass
 class DatabaseConfig:
     """
@@ -185,17 +123,17 @@ class DatabaseConfig:
     """
     
     # Database Identity
-    db_name: str = None                                    # Database adı
-    db_type: DatabaseType = None                          # Database türü (enum)
+    db_name: str = None                                                         # Database adı
+    db_type: DatabaseType = None                                                # Database türü (enum)
     
     # Connection Information (MySQL/PostgreSQL için gerekli)
-    host: Optional[str] = None                            # Server hostname/IP
-    port: Optional[int] = None                            # Server port number  
-    username: Optional[str] = None                        # Database username
-    password: Optional[str] = None                        # Database password
+    host: Optional[str] = None                                                  # Server hostname/IP
+    port: Optional[int] = None                                                  # Server port number
+    username: Optional[str] = None                                              # Database username
+    password: Optional[str] = None                                              # Database password
     
     # Engine Configuration
-    engine_config: EngineConfig = field(default_factory=EngineConfig)  # SQLAlchemy engine config
+    engine_config: EngineConfig = field(default_factory=EngineConfig)           # SQLAlchemy engine config
 
     def get_connection_string(self) -> str:
         """
@@ -214,25 +152,19 @@ class DatabaseConfig:
         """
         if self.db_type == DatabaseType.SQLITE:
             # SQLite: Dosya tabanlı database
-            return f"sqlite:///{self.db_name}.db" 
-            
+            return f"sqlite:///{self.db_name}.db"
         elif self.db_type == DatabaseType.MYSQL:
             # MySQL: Network üzerinden MySQL server
-            return f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.db_name}" 
-            
+            return f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.db_name}"
         elif self.db_type == DatabaseType.POSTGRESQL:
             # PostgreSQL: Network üzerinden PostgreSQL server
-            return f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.db_name}" 
-            
+            return f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.db_name}"
         else:
             # Desteklenmeyen database türü
-            raise ValueError(f"Unsupported database type: {self.db_type}")
+            raise ValidationError(f"Unsupported database type: {self.db_type}")
 
-# =============================================================================
-# DATABASE-SPECIFIC ENGINE CONFIGURATIONS
-# Her database türü için optimize edilmiş engine konfigrasyon tanımları
-# =============================================================================
 
+# ======================================================================================== PRE-DEFINED ENGINE CONFIGS ==
 DB_ENGINE_CONFIGS = {
     # SQLite Configuration - Single-threaded embedded database
     DatabaseType.SQLITE: EngineConfig(
@@ -278,11 +210,70 @@ DB_ENGINE_CONFIGS = {
     ),
 }
 
-# =============================================================================
-# CONFIGURATION FACTORY FUNCTIONS
-# Kolay ve tip-güvenli konfigrasyon oluşturma fonksiyonları
-# =============================================================================
 
+# ================================================================================================== FACTORY FUNCTION ==
+def get_database_config(
+        db_name: str,
+        db_type: DatabaseType,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        custom_engine_config: Optional[EngineConfig] = None
+) -> DatabaseConfig:
+    """
+    Generic database konfigrasyon oluşturucu fonksiyon
+
+    Bu fonksiyon tüm database türleri için merkezi konfigrasyon oluşturma
+    noktasıdır. Diğer get_*_config fonksiyonları bu fonksiyonu kullanır.
+
+    ALGORITHM:
+    1. Engine konfigrasyonunu belirle (custom veya predefined)
+    2. Database türüne uygun default değerleri validate et
+    3. DatabaseConfig instance oluştur ve döndür
+
+    Args:
+        db_name (str): Database adı (gerekli)
+        db_type (DatabaseType): Database türü (gerekli)
+        host (Optional[str]): Server adresi (MySQL/PostgreSQL için gerekli)
+        port (Optional[int]): Server portu (MySQL/PostgreSQL için gerekli)
+        username (Optional[str]): Kullanıcı adı (MySQL/PostgreSQL için gerekli)
+        password (Optional[str]): Şifre (MySQL/PostgreSQL için gerekli)
+        custom_engine_config (Optional[EngineConfig]): Özel engine konfigrasyonu
+
+    Returns:
+        DatabaseConfig: Belirtilen parametrelerle oluşturulmuş konfigrasyon
+
+    Raises:
+        KeyError: Bilinmeyen database türü için
+    """
+
+    # Step 1: Engine konfigrasyonunu belirle
+    # Öncelik: custom_engine_config > predefined config
+    if custom_engine_config:
+        # Kullanıcı özel konfigrasyon vermiş, onu kullan
+        engine_config = custom_engine_config
+    else:
+        # Predefined konfigrasyon kullan (database türüne göre optimize edilmiş)
+        engine_config = DB_ENGINE_CONFIGS.get(db_type)
+
+        # Eğer database türü desteklenmiyorsa hata fırlat
+        if engine_config is None:
+            raise KeyError(f"No predefined engine config found for database type: {db_type}")
+
+    # Step 2: DatabaseConfig instance oluştur ve döndür
+    return DatabaseConfig(
+        db_type=db_type,  # Database türü
+        db_name=db_name,  # Database adı
+        host=host,  # Server adresi (SQLite için None)
+        port=port,  # Server portu (SQLite için None)
+        username=username,  # Kullanıcı adı (SQLite için None)
+        password=password,  # Şifre (SQLite için None)
+        engine_config=engine_config  # Engine konfigrasyonu
+    )
+
+
+# =========================================================================================== SQLITE FACTORY FUNCTION ==
 def get_sqlite_config(db_name: str = "miniflow_database") -> DatabaseConfig:
     """
     SQLite database için optimize edilmiş konfigrasyon oluşturur
@@ -301,6 +292,8 @@ def get_sqlite_config(db_name: str = "miniflow_database") -> DatabaseConfig:
     """
     return get_database_config(db_type=DatabaseType.SQLITE, db_name=db_name)
 
+
+# ======================================================================================= POSTGRESQL FACTORY FUNCTION ==
 def get_postgresql_config(
     db_name: str = "miniflow_database", 
     host: str = "localhost", 
@@ -336,6 +329,8 @@ def get_postgresql_config(
         password=password
     )
 
+
+# ============================================================================================ MYSQL FACTORY FUNCTION ==
 def get_mysql_config(
     db_name: str = "miniflow_database", 
     host: str = "localhost", 
@@ -370,64 +365,3 @@ def get_mysql_config(
         username=username, 
         password=password
     )
-
-def get_database_config(
-    db_name: str, 
-    db_type: DatabaseType, 
-    host: Optional[str] = None, 
-    port: Optional[int] = None,  
-    username: Optional[str] = None,  
-    password: Optional[str] = None, 
-    custom_engine_config: Optional[EngineConfig] = None
-) -> DatabaseConfig:
-    """
-    Generic database konfigrasyon oluşturucu fonksiyon
-    
-    Bu fonksiyon tüm database türleri için merkezi konfigrasyon oluşturma
-    noktasıdır. Diğer get_*_config fonksiyonları bu fonksiyonu kullanır.
-    
-    ALGORITHM:
-    1. Engine konfigrasyonunu belirle (custom veya predefined)
-    2. Database türüne uygun default değerleri validate et
-    3. DatabaseConfig instance oluştur ve döndür
-    
-    Args:
-        db_name (str): Database adı (gerekli)
-        db_type (DatabaseType): Database türü (gerekli)
-        host (Optional[str]): Server adresi (MySQL/PostgreSQL için gerekli)
-        port (Optional[int]): Server portu (MySQL/PostgreSQL için gerekli)
-        username (Optional[str]): Kullanıcı adı (MySQL/PostgreSQL için gerekli)
-        password (Optional[str]): Şifre (MySQL/PostgreSQL için gerekli)
-        custom_engine_config (Optional[EngineConfig]): Özel engine konfigrasyonu
-        
-    Returns:
-        DatabaseConfig: Belirtilen parametrelerle oluşturulmuş konfigrasyon
-        
-    Raises:
-        KeyError: Bilinmeyen database türü için
-    """
-    
-    # Step 1: Engine konfigrasyonunu belirle
-    # Öncelik: custom_engine_config > predefined config
-    if custom_engine_config:
-        # Kullanıcı özel konfigrasyon vermiş, onu kullan
-        engine_config = custom_engine_config
-    else:
-        # Predefined konfigrasyon kullan (database türüne göre optimize edilmiş)
-        engine_config = DB_ENGINE_CONFIGS.get(db_type)
-        
-        # Eğer database türü desteklenmiyorsa hata fırlat
-        if engine_config is None:
-            raise KeyError(f"No predefined engine config found for database type: {db_type}")
-
-    # Step 2: DatabaseConfig instance oluştur ve döndür
-    return DatabaseConfig(
-        db_type=db_type,                    # Database türü
-        db_name=db_name,                   # Database adı
-        host=host,                         # Server adresi (SQLite için None)
-        port=port,                         # Server portu (SQLite için None)  
-        username=username,                 # Kullanıcı adı (SQLite için None)
-        password=password,                 # Şifre (SQLite için None)
-        engine_config=engine_config        # Engine konfigrasyonu
-    )
-        

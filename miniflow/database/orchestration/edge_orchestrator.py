@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, List
 
 from .base_orchestration import BaseOrchestration
-from ...exceptions import ValidationError, BusinessLogicError, ErrorManager
+from ...exceptions import ValidationError, BusinessLogicError
 
 
 class EdgeOrchestrator(BaseOrchestration):
@@ -12,23 +12,16 @@ class EdgeOrchestrator(BaseOrchestration):
     def __init__(self):
         super().__init__()
 
-    @ErrorManager.operation_context("edge_create")
     def create(self, session: Session, edge_data: Dict[str, Any]) -> Dict[str, Any]:
         """Edge oluşturma"""
         # 1. VALIDATION: From Node ID
         from_node_id = edge_data.get('from_node_id')
-        if not from_node_id:
-            raise ValidationError("From node ID is required")
-            
         from_node = self.node_crud.find_by_id(session, from_node_id)
         if not from_node:
             raise BusinessLogicError(f"From node not found: {from_node_id}")
         
         # 2. VALIDATION: To Node ID
         to_node_id = edge_data.get('to_node_id')
-        if not to_node_id:
-            raise ValidationError("To node ID is required")
-            
         to_node = self.node_crud.find_by_id(session, to_node_id)
         if not to_node:
             raise BusinessLogicError(f"To node not found: {to_node_id}")
@@ -54,7 +47,6 @@ class EdgeOrchestrator(BaseOrchestration):
         # 8. RETURN: API Format
         return edge.to_dict()
 
-    @ErrorManager.operation_context("edge_update")
     def update(self, session: Session, edge_id: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
         """Edge güncelleme"""
         # 1. VALIDATION: Edge ID
@@ -95,7 +87,6 @@ class EdgeOrchestrator(BaseOrchestration):
         # 4. RETURN: API Format
         return updated_edge.to_dict()
 
-    @ErrorManager.operation_context("edge_delete")
     def delete(self, session: Session, edge_id: str) -> Dict[str, Any]:
         """Edge silme"""
         # 1. VALIDATION: Edge ID
@@ -171,9 +162,6 @@ class EdgeOrchestrator(BaseOrchestration):
     def get_by_workflow(self, session: Session, workflow_id: str) -> List[Dict[str, Any]]:
         """Belirli bir workflow'a ait edge'leri getir"""
         # 1. VALIDATION: Workflow ID
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required")
-            
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
             raise BusinessLogicError(f"Workflow not found: {workflow_id}")

@@ -104,6 +104,11 @@ class WorkflowOrchestrator(BaseOrchestration):
         # Return
         return workflow_dict
 
+    def get_all(self, session: Session) -> List[Dict[str, Any]]:
+        """Tüm workflow'ları getir"""
+        workflows = self.workflow_crud.get_all(session)
+        return [workflow.to_dict() for workflow in workflows]
+
     def count(self, session: Session) -> int:
         """ Count Workflow """
         return self.workflow_crud.count(session)

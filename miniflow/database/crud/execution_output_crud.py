@@ -34,125 +34,55 @@ class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput], AuditMixin):
         """Delete execution output with audit logging."""
         return super().delete(session, execution_output_id)
 
-    def check_output_exists(self, session: Session, execution_id: str, node_id: str) -> bool:
-        """Check if execution output exists for given execution and node."""
-        outputs = self.filter(session, {'execution_id': execution_id, 'node_id': node_id})
-        return len(outputs) > 0
+    def count_by_status(self, session: Session, status: ExecutionOutputStatus) -> int:
+        """Status'a göre sayım."""
+        return self.count_filtered(session, {'status': status})
 
-    def get_outputs_by_execution_and_status(self, session: Session, execution_id: str, 
-                                           status: ExecutionOutputStatus) -> List[ExecutionOutput]:
-        """Get execution outputs filtered by execution and status"""
-        stmt = (
-            select(self.model)
-            .where(
-                and_(
-                    self.model.execution_id == execution_id,
-                    self.model.status == status
-                )
-            )
-        )
-        return list(session.execute(stmt).scalars().all())
+    def count_by_execution(self, session: Session, execution_id: str) -> int:
+        """Execution'a göre sayım."""
+        return self.count_filtered(session, {'execution_id': execution_id})
 
-    def get_completed_nodes_for_execution(self, session: Session, execution_id: str) -> List[str]:
-        """Get list of completed node IDs for an execution"""
-        stmt = (
-            select(self.model.node_id)
-            .where(
-                and_(
-                    self.model.execution_id == execution_id,
-                    self.model.status == ExecutionOutputStatus.SUCCESS
-                )
-            )
-        )
-        result = session.execute(stmt).scalars().all()
-        return list(result)
+    def get_by_status(self, session: Session, status: ExecutionOutputStatus) -> List[ExecutionOutput]:
+        """Status'a göre kayıtlar."""
+        return self.filter(session, {'status': status})
 
-    def get_execution_results_for_dependency_resolution(self, session: Session, 
-                                                       execution_id: str, 
-                                                       node_ids: List[str]) -> Dict[str, Dict[str, Any]]:
-        """
-        Get execution results for specific nodes to resolve dynamic dependencies
-        Returns: {node_id: {node_name: result_data}}
-        """
-        if not node_ids:
+    def get_by_execution(self, session: Session, execution_id: str) -> List[ExecutionOutput]:
+        """Execution'a göre kayıtlar."""
+        return self.filter(session, {'execution_id': execution_id})
+
+    def get_result(self, session: Session, record_id: str) -> List[Dict[str, Any]]:
+        """Seçilen kayıtların result_data kolonunu JSON olarak döndür."""
+        record = self.find_by_id(session, record_id)
+        return record.result_data or {}
+
+    def get_result_by_node_and_execution(self, session: Session, node_id: str, execution_id: str) -> Dict[str, Any]:
+        """Node'a ve execution'a göre result_data kolonunu JSON olarak döndür."""
+        # Belirli node_id ve execution_id ile kayıt bul
+        outputs = self.filter(session, {'node_id': node_id, 'execution_id': execution_id})
+        
+        if not outputs:
             return {}
         
-        stmt = (
-            select(
-                self.model.node_id,
-                self.model.result_data,
-                Node.name.label('node_name')
-            )
-            .join(Node, self.model.node_id == Node.id)
-            .where(
-                and_(
-                    self.model.execution_id == execution_id,
-                    self.model.node_id.in_(node_ids),
-                    self.model.status == ExecutionOutputStatus.SUCCESS
-                )
-            )
-        )
+        # İlk (ve tek olması gereken) kaydın result_data'sını döndür
+        return outputs[0].result_data or {}
+
+    def collect_all_results(self, session: Session, execution_id: str) -> Dict[str, Any]:
+        """Execution'a ait tüm sonuçları topla ve basit JSON formatla döndür."""
+        outputs = self.filter(session, {'execution_id': execution_id})
         
-        results = session.execute(stmt).all()
-        
-        # Build the dependency resolution dictionary
-        dependency_data = {}
-        for row in results:
-            dependency_data[row.node_id] = {
-                'node_name': row.node_name,
-                'result_data': row.result_data or {}
+        results = {}
+        for output in outputs:
+            duration = None
+            if output.started_at and output.ended_at:
+                duration = (output.ended_at - output.started_at).total_seconds()
+            
+            results[output.node_id] = {
+                'status': output.status.value,
+                'started_at': output.started_at.isoformat() if output.started_at else None,
+                'ended_at': output.ended_at.isoformat() if output.ended_at else None,
+                'duration': duration,
+                'results': output.result_data or {}
             }
         
-        return dependency_data
+        return results
 
-    def get_execution_progress(self, session: Session, execution_id: str) -> Dict[str, int]:
-        """
-        Get execution progress statistics
-        Returns counts by status
-        """
-        stmt = (
-            select(
-                self.model.status,
-                func.count(self.model.id).label('count')
-            )
-            .where(self.model.execution_id == execution_id)
-            .group_by(self.model.status)
-        )
-        
-        results = session.execute(stmt).all()
-        
-        progress = {
-            'success': 0,
-            'failure': 0,
-            'timeout': 0,
-            'cancelled': 0,
-            'total': 0
-        }
-        
-        for row in results:
-            status_key = row.status.value.lower()  # Convert enum to string
-            progress[status_key] = row.count
-            progress['total'] += row.count
-            
-        return progress
-
-    def get_node_result_data(self, session: Session, execution_id: str, 
-                            node_name: str) -> Optional[Dict[str, Any]]:
-        """
-        Get result data for a specific node by name
-        Used for dynamic parameter resolution
-        """
-        stmt = (
-            select(self.model.result_data)
-            .join(Node, self.model.node_id == Node.id)
-            .where(
-                and_(
-                    self.model.execution_id == execution_id,
-                    Node.name == node_name,
-                    self.model.status == ExecutionOutputStatus.SUCCESS
-                )
-            )
-        )
-        
-        result = session.execute(stmt).scalar_one_or_none()
-        return result or {}

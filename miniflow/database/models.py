@@ -8,7 +8,6 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON
 
 class WorkflowStatus(str, enum.Enum):
     ACTIVE = "active"
-    INACTIVE = "inactive"
     DRAFT = "draft"
 
 class ExecutionStatus(str, enum.Enum):
@@ -31,7 +30,8 @@ class ConditionType(str, enum.Enum):
     CONDITIONAL = "conditional"
 
 class ScriptType(str, enum.Enum):
-    PYTHON = "python"
+    PYTHON = "py"
+    BASH = "sh"
 
 class ScriptTestStatus(str, enum.Enum):
     UNTESTED = "untested"
@@ -69,8 +69,7 @@ class BaseModel(Base):
 
     id = Column(String(20), primary_key=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
-                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     def __init__(self, **kwargs):
         """Initialize the model with auto-generated ID if not provided"""
@@ -106,12 +105,19 @@ class Workflow(BaseModel):
 
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text, nullable=True)
-    status = Column(Enum(WorkflowStatus), default=WorkflowStatus.DRAFT, nullable=False)
     priority = Column(Integer, default=0, nullable=False)
+    status = Column(Enum(WorkflowStatus), default=WorkflowStatus.DRAFT, nullable=False)
 
+    # İstatistik alanları (sistem tarafından hesaplanacak)
+    execution_count = Column(Integer, default=0, nullable=False)
+    last_executed_at = Column(DateTime, default=None, nullable=True)
+    last_execution_duration = Column(Float, default=None, nullable=True)
+
+    # Relationships
     nodes: List["Node"] = relationship("Node", back_populates="workflow", cascade="all, delete-orphan")
     edges: List["Edge"] = relationship("Edge", back_populates="workflow", cascade="all, delete-orphan")
     executions: List["Execution"] = relationship("Execution", back_populates="workflow", cascade="all, delete-orphan")
+    execution_inputs: List["ExecutionInput"] = relationship("ExecutionInput", back_populates="workflow")
 
 
 # ======================================================================================================= NODE MODEL  ==
@@ -128,12 +134,11 @@ class Node(BaseModel):
     max_retries = Column(Integer, default=3, nullable=False)
     timeout_seconds = Column(Integer, default=300, nullable=False)
 
+    # Relationships
     workflow: "Workflow" = relationship("Workflow", back_populates="nodes")
     script: Optional["Script"] = relationship("Script", back_populates="nodes")
-    edges_from: List["Edge"] = relationship("Edge", foreign_keys="[Edge.from_node_id]", back_populates="from_node",
-                                            cascade="all, delete-orphan")
-    edges_to: List["Edge"] = relationship("Edge", foreign_keys="[Edge.to_node_id]", back_populates="to_node",
-                                          cascade="all, delete-orphan")
+    edges_from: List["Edge"] = relationship("Edge", foreign_keys="[Edge.from_node_id]", back_populates="from_node",cascade="all, delete-orphan")
+    edges_to: List["Edge"] = relationship("Edge", foreign_keys="[Edge.to_node_id]", back_populates="to_node",cascade="all, delete-orphan")
     execution_inputs: List["ExecutionInput"] = relationship("ExecutionInput", back_populates="node")
     execution_outputs: List["ExecutionOutput"] = relationship("ExecutionOutput", back_populates="node")
 
@@ -142,14 +147,14 @@ class Node(BaseModel):
 class Edge(BaseModel):
     __prefix__ = "ED"
     __tablename__ = 'edges'
-    __table_args__ = (UniqueConstraint('workflow_id', 'from_node_id', 'to_node_id', 'condition_type',
-                                       name='uq_edge_workflow_nodes_condition'),)
+    __table_args__ = (UniqueConstraint('workflow_id', 'from_node_id', 'to_node_id', 'condition_type',name='uq_edge_workflow_nodes_condition'),)
 
     workflow_id = Column(String(12), ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
     from_node_id = Column(String(12), ForeignKey('nodes.id', ondelete='CASCADE'), nullable=False)
     to_node_id = Column(String(12), ForeignKey('nodes.id', ondelete='CASCADE'), nullable=False)
     condition_type = Column(Enum(ConditionType), default=ConditionType.SUCCESS, nullable=False)
 
+    # Relationships
     workflow: "Workflow" = relationship("Workflow", back_populates="edges")
     from_node: "Node" = relationship("Node", foreign_keys=[from_node_id], back_populates="edges_from")
     to_node: "Node" = relationship("Node", foreign_keys=[to_node_id], back_populates="edges_to")
@@ -162,13 +167,15 @@ class Script(BaseModel):
 
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text, nullable=True)
-    language = Column(Enum(ScriptType), nullable=False, default=ScriptType.PYTHON)
-    type = Column(String(100), nullable=False, default=ScriptType.PYTHON)
+    language = Column(Enum(ScriptType), nullable=False)
     script_path = Column(Text, nullable=False)
     input_params = Column(JSON, default=dict, nullable=False)
     output_params = Column(JSON, default=dict, nullable=False)
+
+    # Sistem tarafından belirlenecek
     test_status = Column(Enum(ScriptTestStatus), default=ScriptTestStatus.UNTESTED, nullable=False)
 
+    # Relationships
     nodes: List["Node"] = relationship("Node", back_populates="script")
 
 
@@ -179,17 +186,16 @@ class Execution(BaseModel):
 
     workflow_id = Column(String(12), ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
     status = Column(Enum(ExecutionStatus), default=ExecutionStatus.PENDING, nullable=False)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    ended_at = Column(DateTime, nullable=True)
     pending_nodes = Column(Integer, default=0, nullable=False)
     executed_nodes = Column(Integer, default=0, nullable=False)
     results = Column(JSON, default=dict, nullable=False)
-    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    ended_at = Column(DateTime, nullable=True)
 
+    # Relationships
     workflow: "Workflow" = relationship("Workflow", back_populates="executions")
-    execution_inputs: List["ExecutionInput"] = relationship("ExecutionInput", back_populates="execution",
-                                                            cascade="all, delete-orphan")
-    execution_outputs: List["ExecutionOutput"] = relationship("ExecutionOutput", back_populates="execution",
-                                                              cascade="all, delete-orphan")
+    execution_inputs: List["ExecutionInput"] = relationship("ExecutionInput", back_populates="execution",cascade="all, delete-orphan")
+    execution_outputs: List["ExecutionOutput"] = relationship("ExecutionOutput", back_populates="execution",cascade="all, delete-orphan")
 
 
 # ============================================================================================= EXECUTION INPUT MODEL ==
@@ -198,17 +204,18 @@ class ExecutionInput(BaseModel):
     __tablename__ = 'execution_inputs'
     __table_args__ = (UniqueConstraint('execution_id', 'node_id', name='uq_execution_input_execution_node'),)
 
+    workflow_id = Column(String(12), ForeignKey('workflows.id', ondelete='CASCADE'), nullable=False)
     execution_id = Column(String(12), ForeignKey('executions.id', ondelete='CASCADE'), nullable=False)
     node_id = Column(String(12), ForeignKey('nodes.id', ondelete='CASCADE'), nullable=False)
     priority = Column(Integer, default=0, nullable=False)
     dependency_count = Column(Integer, default=0, nullable=False)
-    wait_factor = Column(Integer, default=0, nullable=False)
 
-    # Denormalized fields for performance (scheduler optimization)
-    node_name = Column(String(100), nullable=False)
+    # Performans için tutulaacak olan
     script_path = Column(Text, nullable=True)
     node_params = Column(JSON, default=dict, nullable=False)
 
+    # Relationships
+    workflow: "Workflow" = relationship("Workflow", back_populates="execution_inputs")
     execution: "Execution" = relationship("Execution", back_populates="execution_inputs")
     node: "Node" = relationship("Node", back_populates="execution_inputs")
 
@@ -226,6 +233,7 @@ class ExecutionOutput(BaseModel):
     started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
 
+    # Relationships
     execution: "Execution" = relationship("Execution", back_populates="execution_outputs")
     node: "Node" = relationship("Node", back_populates="execution_outputs")
 
@@ -245,6 +253,7 @@ class ArchivedExecution(BaseModel):
     archived_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     archive_reason = Column(Enum(ArchiveReason), default=ArchiveReason.AUTO_CLEANUP, nullable=False)
 
+    # Relationships
     workflow: "Workflow" = relationship("Workflow")
 
 
@@ -268,6 +277,4 @@ class EnvironmentVariable(BaseModel):
     name = Column(String(100), nullable=False, unique=True)
     value = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-
-    def __repr__(self) -> str:
-        return f"<EnvironmentVariable(name={self.name}, value={self.value})>"
+    is_encrypted = Column(Boolean, nullable=False, default=False)

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, Union, List
 
 from .base_orchestration import BaseOrchestration
-from ...exceptions import ValidationError, BusinessLogicError, ErrorManager
+from ...exceptions import ValidationError, BusinessLogicError
 
 
 class NodeOrchestrator(BaseOrchestration):
@@ -16,9 +16,6 @@ class NodeOrchestrator(BaseOrchestration):
         """Node oluşturma"""
         # 1. VALIDATION: Workflow ID
         workflow_id = node_data.get('workflow_id')
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required")
-            
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
             raise BusinessLogicError(f"Workflow not found: {workflow_id}")
@@ -234,9 +231,6 @@ class NodeOrchestrator(BaseOrchestration):
     def get_by_workflow(self, session: Session, workflow_id: str) -> List[Dict[str, Any]]:
         """Belirli bir workflow'a ait node'ları getir"""
         # 1. VALIDATION: Workflow ID
-        if not workflow_id:
-            raise ValidationError("Workflow ID is required")
-            
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
             raise BusinessLogicError(f"Workflow not found: {workflow_id}")
@@ -248,9 +242,6 @@ class NodeOrchestrator(BaseOrchestration):
     def get_by_script(self, session: Session, script_id: str) -> List[Dict[str, Any]]:
         """Belirli bir script'e ait node'ları getir"""
         # 1. VALIDATION: Script ID
-        if not script_id:
-            raise ValidationError("Script ID is required")
-            
         script = self.script_crud.find_by_id(session, script_id)
         if not script:
             raise BusinessLogicError(f"Script not found: {script_id}")

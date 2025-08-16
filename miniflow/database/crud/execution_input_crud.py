@@ -33,125 +33,91 @@ class ExecutionInputCRUD(BaseCRUD[ExecutionInput], AuditMixin):
         """Delete execution input with audit logging."""
         return super().delete(session, execution_input_id)
 
-    def count_ready_tasks(self, session: Session) -> int:
-        """Count ready tasks (dependency_count = 0)."""
-        return session.query(ExecutionInput).filter(ExecutionInput.dependency_count == 0).count()
+    def count_ready_tasks(self, session: Session, execution_id: str = None) -> int:
+        """Count tasks that are ready to execute (dependency_count = 0)."""
+        filters = {'dependency_count': 0}
+        if execution_id:
+            filters['execution_id'] = execution_id
+        return self.count_filtered(session, filters)
 
-    def get_ready_tasks_with_details(self, session: Session, limit: int = 50) -> List[Dict[str, Any]]:
-        """
-        Get ready tasks for execution with enriched details
-        Returns task data with node and workflow information
-        """
-        from ..models import Node, Workflow, Script
-        
-        # Join ExecutionInput with Node, Workflow, and Script to get detailed information
-        query = session.query(
-            ExecutionInput.id.label('task_id'),
-            ExecutionInput.execution_id,
-            ExecutionInput.node_id,
-            ExecutionInput.dependency_count,
-            Node.name.label('node_name'),
-            Node.script_id,
-            Node.params.label('node_params'),
-            Node.max_retries,
-            Node.timeout_seconds,
-            Workflow.id.label('workflow_id'),
-            Workflow.name.label('workflow_name'),
-            Script.script_path.label('script_path')
-        ).join(
-            Node, ExecutionInput.node_id == Node.id
-        ).join(
-            Workflow, Node.workflow_id == Workflow.id
-        ).join(
-            Script, Node.script_id == Script.id
-        ).filter(
-            ExecutionInput.dependency_count == 0
-        ).limit(limit)
-        
-        results = query.all()
-        
-        # Convert to list of dictionaries
-        tasks = []
-        for row in results:
-            task = {
-                'task_id': row.task_id,
-                'execution_id': row.execution_id,
-                'node_id': row.node_id,
-                'node_name': row.node_name,
-                'script_id': row.script_id,
-                'script_path': row.script_path,
-                'node_params': row.node_params,
-                'max_retries': row.max_retries or 3,
-                'timeout_seconds': row.timeout_seconds or 300,
-                'workflow_id': row.workflow_id,
-                'workflow_name': row.workflow_name,
-                'dependency_count': row.dependency_count
-            }
-            tasks.append(task)
-        
-        return tasks
+    def count_by_execution(self, session: Session, execution_id: str) -> int:
+        """Count execution inputs for a specific execution."""
+        return self.count_filtered(session, {'execution_id': execution_id})
 
-    def bulk_delete_by_ids(self, session: Session, task_ids: List[str]) -> int:
+    def get_by_execution(self, session: Session, execution_id: str) -> List[ExecutionInput]:
+        """Get all execution inputs for a specific execution."""
+        return self.filter(session, {'execution_id': execution_id}, order_by_field='priority')
+
+    def get_by_execution_and_node(self, session: Session, execution_id: str, node_id: str) -> Optional[ExecutionInput]:
+        """Get execution input for a specific execution and node."""
+        execution_inputs = self.filter(session, {
+            'execution_id': execution_id,
+            'node_id': node_id
+        })
+        return execution_inputs[0] if execution_inputs else None
+
+    def get_ready_tasks(self, session: Session, execution_id: str = None, limit: int = 50) -> List[ExecutionInput]:
+        """Get tasks that are ready to execute, ordered by priority (desc)."""
+        filters = {'dependency_count': 0}
+        if execution_id:
+            filters['execution_id'] = execution_id
+        
+        # Base CRUD filter kullan, sonra manuel sırala
+        tasks = self.filter(session, filters, limit=1000, order_by_field='priority')
+        # Yüksek priority önce gelsin
+        tasks_sorted = sorted(tasks, key=lambda x: x.priority, reverse=True)
+        return tasks_sorted[:limit]
+
+    def get_node_params(self, session: Session, execution_input_id: str) -> Dict[str, Any]:
+        """Get node parameters for a specific execution input."""
+        execution_input = self.find_by_id(session, execution_input_id)
+        return execution_input.node_params
+
+    # ==================================================================================== SIMPLE BUSINESS LOGIC ==
+
+    def get_tasks_and_increase_others_priority(self, session: Session, 
+                                             execution_id: str = None,
+                                             batch_size: int = 10,
+                                             priority_increment: int = 1) -> List[ExecutionInput]:
         """
-        Bulk delete execution inputs by task IDs
-        Returns number of deleted records
+        Basit: Hazır taskları çek, geri kalanın priority'sini artır.
         """
-        if not task_ids:
+        # 1. Hazır taskları çek
+        ready_tasks = self.get_ready_tasks(session, execution_id, limit=1000)
+        
+        if not ready_tasks:
+            return []
+        
+        # 2. Seçilen ve kalan taskları ayır
+        selected_tasks = ready_tasks[:batch_size]
+        remaining_tasks = ready_tasks[batch_size:]
+        
+        # 3. Kalan taskların priority'sini artır
+        if remaining_tasks and priority_increment > 0:
+            for task in remaining_tasks:
+                self.update_execution_input(session, task.id, priority=task.priority + priority_increment)
+        
+        return selected_tasks
+
+    def decrease_dependency_count(self, session: Session, node_id: str, execution_id: str) -> int:
+        """
+        Verilen node_id ve execution_id'ye sahip kaydın dependency_count'ını 1 azalt.
+        """
+        # Bu node ve execution için execution input'ı bul
+        execution_inputs = self.filter(session, {
+            'execution_id': execution_id, 
+            'node_id': node_id
+        })
+        
+        if not execution_inputs:
             return 0
-            
-        deleted_count = session.query(ExecutionInput).filter(
-            ExecutionInput.id.in_(task_ids)
-        ).delete(synchronize_session='fetch')
         
-        return deleted_count
-
-    def get_dependent_nodes(self, session: Session, completed_node_id: str, execution_id: str) -> List[str]:
-        """
-        Get node IDs that depend on the completed node in the given execution
-        """
-        from ..models import Edge
+        # İlk (ve tek olması gereken) kaydı güncelle
+        execution_input = execution_inputs[0]
         
-        # Find edges where from_node_id is the completed node
-        edges_query = session.query(Edge.to_node_id).filter(
-            Edge.from_node_id == completed_node_id
-        )
+        if execution_input.dependency_count > 0:
+            new_count = execution_input.dependency_count - 1
+            self.update_execution_input(session, execution_input.id, dependency_count=new_count)
+            return 1
         
-        dependent_node_ids = [row.to_node_id for row in edges_query.all()]
-        
-        # Filter to only nodes that exist in this execution's input tasks
-        if dependent_node_ids:
-            existing_tasks_query = session.query(ExecutionInput.node_id).filter(
-                ExecutionInput.execution_id == execution_id,
-                ExecutionInput.node_id.in_(dependent_node_ids)
-            )
-            
-            existing_dependent_nodes = [row.node_id for row in existing_tasks_query.all()]
-            return existing_dependent_nodes
-        
-        return []
-
-    def decrease_dependency_count_for_nodes(self, session: Session, node_ids: List[str], execution_id: str) -> int:
-        """
-        Decrease dependency count for multiple nodes in bulk
-        Returns number of updated records
-        """
-        if not node_ids:
-            return 0
-            
-        updated_count = session.query(ExecutionInput).filter(
-            ExecutionInput.execution_id == execution_id,
-            ExecutionInput.node_id.in_(node_ids)
-        ).update(
-            {ExecutionInput.dependency_count: ExecutionInput.dependency_count - 1},
-            synchronize_session='fetch'
-        )
-        
-        return updated_count
-
-    def get_execution_inputs_by_execution(self, session: Session, execution_id: str) -> List[ExecutionInput]:
-        """
-        Get all execution inputs for a specific execution
-        """
-        return session.query(ExecutionInput).filter(
-            ExecutionInput.execution_id == execution_id
-        ).all()
+        return 0

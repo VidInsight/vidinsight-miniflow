@@ -6,6 +6,9 @@ Provides type-safe CRUD operations with performance optimizations.
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.orm import DeclarativeMeta, Session
+from datetime import datetime, timezone
+
+from ...exceptions import CRUDException
 
 # ============================================================================================ MODEL TYPE ==
 ModelType = TypeVar("ModelType", bound=DeclarativeMeta)
@@ -27,26 +30,28 @@ class BaseCRUD(Generic[ModelType]):
         if not model_data:
             raise ValueError("No data provided for database insertion")
 
-        db_object = self.model(**model_data)
+        # Filter out invalid fields that don't exist in the model
+        valid_data = {}
+        for field, value in model_data.items():
+            if hasattr(self.model, field):
+                valid_data[field] = value
+
+        db_object = self.model(**valid_data)
         session.add(db_object)
         session.flush()
         return db_object
 
     def find_by_id(self, session: Session, record_id: Union[str, int]) -> Optional[ModelType]:
         result = session.get(self.model, record_id)
-        if not result:
-            raise ValueError(f"{self.model_name} not found: {record_id}")
         return result
 
-    def find_by_name(self, session: Session, name: str) -> Optional[ModelType]:
+    def find_by_name(self, session: Session, record_name: str) -> Optional[ModelType]:
         if not hasattr(self.model, 'name'):
-            raise ValueError(f"{self.model_name} does not have a 'name' field")
+            raise CRUDException(f"{record_name} does not have a 'name' field")
 
-        stmt = select(self.model).where(self.model.name == name)
+        stmt = select(self.model).where(self.model.name == record_name)
         result = session.execute(stmt).scalar_one_or_none()
 
-        if not result:
-            raise ValueError(f"{self.model_name} not found with name: {name}")
         return result
 
     def update(self, session: Session, record_id: Union[str, int], **model_data) -> ModelType:
@@ -54,6 +59,10 @@ class BaseCRUD(Generic[ModelType]):
             raise ValueError("No data provided for database update")
 
         db_object = self.find_by_id(session, record_id)
+        if db_object is None:
+            raise CRUDException(f"No such record {record_id}")
+
+        model_data['updated_at'] = datetime.now(timezone.utc)
 
         for field, value in model_data.items():
             if hasattr(db_object, field):
@@ -64,22 +73,21 @@ class BaseCRUD(Generic[ModelType]):
 
     def delete(self, session: Session, record_id: Union[str, int]) -> ModelType:
         db_object = self.find_by_id(session, record_id)
+        if db_object is None:
+            raise CRUDException(f"No such record {record_id}")
+
         session.delete(db_object)
         session.flush()
         return db_object
 
     # QUERY OPERATIONS
     # =========================
-    def get_all(self, session: Session, skip: int = 0, limit: int = 100,
-               order_by_field: str = None, desc: bool = False) -> List[ModelType]:
+    def get_all(self, session: Session, skip: int = 0, limit: int = 100, order_by: str = None) -> List[ModelType]:
         limit = min(limit, 1000)  # Memory protection
-
         stmt = select(self.model)
 
-        if order_by_field and hasattr(self.model, order_by_field):
-            order_column = getattr(self.model, order_by_field)
-            if desc:
-                order_column = order_column.desc()
+        if order_by and hasattr(self.model, order_by):
+            order_column = getattr(self.model, order_by)
             stmt = stmt.order_by(order_column)
         else:
             stmt = stmt.order_by(self.model.id)  # Default ID ordering
@@ -95,8 +103,7 @@ class BaseCRUD(Generic[ModelType]):
         stmt = select(func.count(self.model.id)).where(self.model.id == record_id)
         return session.execute(stmt).scalar_one() > 0
 
-    def filter(self, session: Session, filters: Dict[str, Any],
-              skip: int = 0, limit: int = 100, order_by_field: str = None) -> List[ModelType]:
+    def filter(self, session: Session, filters: Dict[str, Any], skip: int = 0, limit: int = 100, order_by_field: str = None) -> List[ModelType]:
         limit = min(limit, 1000)  # Memory protection
 
         stmt = select(self.model)
@@ -125,22 +132,6 @@ class BaseCRUD(Generic[ModelType]):
                 raise ValueError(f"Field '{field_name}' does not exist in {self.model_name}")
 
         return session.execute(stmt).scalar_one()
-
-    def find_by_field(self, session: Session, field_name: str, value: Any, limit: int = 100) -> List[ModelType]:
-        """Find records by single field value"""
-        if not hasattr(self.model, field_name):
-            raise ValueError(f"Field '{field_name}' does not exist in {self.model_name}")
-
-        limit = min(limit, 1000)
-
-        stmt = (
-            select(self.model)
-            .where(getattr(self.model, field_name) == value)
-            .order_by(self.model.id)
-            .limit(limit)
-        )
-
-        return list(session.execute(stmt).scalars().all())
 
     # BULK OPERATIONS
     # =========================
@@ -196,20 +187,6 @@ class BaseCRUD(Generic[ModelType]):
         result = session.execute(stmt)
         session.flush()
         return result.rowcount or 0
-
-    # OPTIMIZED OPERATIONS
-    # =========================
-    def check_name_exists(self, session: Session, name: str, exclude_id: str = None) -> bool:
-        if not hasattr(self.model, 'name'):
-            raise ValueError(f"{self.model_name} does not have a 'name' field")
-
-        stmt = select(func.count(self.model.id)).where(self.model.name == name)
-
-        if exclude_id:
-            stmt = stmt.where(self.model.id != exclude_id)
-
-        count = session.execute(stmt).scalar_one()
-        return count > 0
 
     def bulk_update_status(self, session: Session, ids: List[Union[str, int]],
                           status_field: str, new_status: Any) -> int:

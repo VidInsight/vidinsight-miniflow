@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, Union, List
 
 from .base_orchestration import BaseOrchestration
 from ..models import WorkflowStatus, ScriptTestStatus
-from ...exceptions import ValidationError, BusinessLogicError, CRUDException, ResourceError, ErrorManager
+from ...exceptions import ValidationError, BusinessLogicError, CRUDException, ResourceError
 
 
 class ScriptOrchestrator(BaseOrchestration):
@@ -223,10 +223,15 @@ class ScriptOrchestrator(BaseOrchestration):
         # 4. RETURN: API Format
         return script_dict
 
+    def get_all(self, session: Session) -> List[Dict[str, Any]]:
+        """Tüm script'leri getir"""
+        scripts = self.script_crud.get_all(session)
+        return [script.to_dict() for script in scripts]
+
     def count(self, session: Session) -> int:
         """Script sayısını getir"""
         return self.script_crud.count(session)
-    
+
     def exists(self, session: Session, script_id: str) -> bool:
         """Script var mı kontrolü"""
         return self.script_crud.exists(session, script_id)
