@@ -4,11 +4,25 @@ from sqlalchemy.orm import Session
 
 from .base_crud import BaseCRUD
 from ..models import Node
-from ..decorators.auditlog_decorators import audit_create, audit_update, audit_delete, AuditMixin
+from ..decorators.auditlog_decorators import (
+    audit_create, 
+    audit_update, 
+    audit_delete, 
+    AuditMixin
+)
+from ...exceptions import (
+    ValidationError, 
+    CRUDException
+)
 
 class NodeCRUD(BaseCRUD[Node], AuditMixin):
+    """
+    Node entity CRUD operations.
+    Manages workflow execution units with script association and parameter handling.
+    """
     
     def __init__(self):
+        """Initialize NodeCRUD with Node model and audit capabilities."""
         super().__init__(Node)
 
     @audit_create("nodes")
@@ -27,13 +41,13 @@ class NodeCRUD(BaseCRUD[Node], AuditMixin):
         return super().delete(session, node_id)
 
     def get_by_workflow(self, session: Session, workflow_id: str) -> List[Node]:
-        """Get all nodes for a specific workflow."""
+        """Get all nodes belonging to a specific workflow."""
         return self.filter(session, {'workflow_id': workflow_id})
 
     def get_by_script(self, session: Session, script_id: str) -> List[Node]:
-        """Get all nodes for a specific script."""
+        """Get all nodes that use a specific script."""
         return self.filter(session, {'script_id': script_id})
 
     def node_name_exists_in_workflow(self, session: Session, name: str, workflow_id: str) -> bool:
-        """Check if a node name exists in the given workflow."""
+        """Check if a node name already exists within the given workflow."""
         return self.count_filtered(session, {'name': name, 'workflow_id': workflow_id}) > 0

@@ -4,7 +4,16 @@ from sqlalchemy import select, and_, func
 
 from .base_crud import BaseCRUD
 from ..models import ExecutionOutput, ExecutionOutputStatus, Execution, Node
-from ..decorators.auditlog_decorators import audit_create, audit_update, audit_delete, AuditMixin
+from ..decorators.auditlog_decorators import (
+    audit_create, 
+    audit_update, 
+    audit_delete, 
+    AuditMixin
+)
+from ...exceptions import (
+    ValidationError, 
+    CRUDException
+)
 
 
 class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput], AuditMixin):
@@ -14,6 +23,7 @@ class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput], AuditMixin):
     """
 
     def __init__(self):
+        """Initialize ExecutionOutputCRUD with ExecutionOutput model and audit capabilities."""
         super().__init__(ExecutionOutput)
         self._init_audit()
 
@@ -35,29 +45,38 @@ class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput], AuditMixin):
         return super().delete(session, execution_output_id)
 
     def count_by_status(self, session: Session, status: ExecutionOutputStatus) -> int:
-        """Status'a göre sayım."""
+        """Count execution outputs filtered by status."""
         return self.count_filtered(session, {'status': status})
 
     def count_by_execution(self, session: Session, execution_id: str) -> int:
-        """Execution'a göre sayım."""
+        """Count execution outputs for a specific execution."""
         return self.count_filtered(session, {'execution_id': execution_id})
 
     def get_by_status(self, session: Session, status: ExecutionOutputStatus) -> List[ExecutionOutput]:
-        """Status'a göre kayıtlar."""
+        """Get execution outputs filtered by status."""
         return self.filter(session, {'status': status})
 
     def get_by_execution(self, session: Session, execution_id: str) -> List[ExecutionOutput]:
-        """Execution'a göre kayıtlar."""
+        """Get all execution outputs for a specific execution."""
         return self.filter(session, {'execution_id': execution_id})
 
-    def get_result(self, session: Session, record_id: str) -> List[Dict[str, Any]]:
-        """Seçilen kayıtların result_data kolonunu JSON olarak döndür."""
+    def get_result(self, session: Session, record_id: str) -> Dict[str, Any]:
+        """Get result data from a specific execution output record."""
+        # BaseCRUD handles validation and error handling
         record = self.find_by_id(session, record_id)
+        if not record:
+            raise CRUDException(f"ExecutionOutput not found (get_result): {record_id}")
         return record.result_data or {}
 
     def get_result_by_node_and_execution(self, session: Session, node_id: str, execution_id: str) -> Dict[str, Any]:
-        """Node'a ve execution'a göre result_data kolonunu JSON olarak döndür."""
-        # Belirli node_id ve execution_id ile kayıt bul
+        """Get result data for a specific node within an execution."""
+        # Input validation
+        if not node_id or not node_id.strip():
+            raise ValidationError("node_id cannot be empty")
+        if not execution_id or not execution_id.strip():
+            raise ValidationError("execution_id cannot be empty")
+        
+        # BaseCRUD filter handles database operations
         outputs = self.filter(session, {'node_id': node_id, 'execution_id': execution_id})
         
         if not outputs:
@@ -67,7 +86,7 @@ class ExecutionOutputCRUD(BaseCRUD[ExecutionOutput], AuditMixin):
         return outputs[0].result_data or {}
 
     def collect_all_results(self, session: Session, execution_id: str) -> Dict[str, Any]:
-        """Execution'a ait tüm sonuçları topla ve basit JSON formatla döndür."""
+        """Collect and aggregate all execution results with timing information."""
         outputs = self.filter(session, {'execution_id': execution_id})
         
         results = {}

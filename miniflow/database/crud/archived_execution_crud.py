@@ -3,7 +3,13 @@ from sqlalchemy.orm import Session
 
 from .base_crud import BaseCRUD
 from ..models import ArchivedExecution, Execution, ExecutionStatus, ArchiveReason
-from ..decorators import audit_create, audit_update, audit_delete, AuditMixin
+from ..decorators.auditlog_decorators import (
+    audit_create, 
+    audit_update, 
+    audit_delete, 
+    AuditMixin
+)
+from ...exceptions import ValidationError
 
 
 class ArchivedExecutionCRUD(BaseCRUD[ArchivedExecution], AuditMixin):
@@ -13,6 +19,7 @@ class ArchivedExecutionCRUD(BaseCRUD[ArchivedExecution], AuditMixin):
     """
 
     def __init__(self):
+        """Initialize ArchivedExecutionCRUD with ArchivedExecution model and audit capabilities."""
         super().__init__(ArchivedExecution)
         self._init_audit()
 

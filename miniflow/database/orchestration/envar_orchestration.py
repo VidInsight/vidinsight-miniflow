@@ -7,13 +7,43 @@ from ...exceptions import ValidationError, BusinessLogicError
 
 
 class EnvarOrchestrator(BaseOrchestration):
-    """Environment Variable operasyonları için orchestrator"""
+    """
+    Environment variable orchestration operations for configuration management.
+    
+    Provides high-level operations for creating, updating, deleting, and managing
+    environment variables with validation, encryption support, and secure handling.
+    """
 
     def __init__(self):
+        """
+        Initialize EnvarOrchestrator.
+        
+        Args:
+            None
+            
+        Returns:
+            None
+            
+        Raises:
+            None
+        """
         super().__init__()
 
     def create(self, session: Session, envar_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Environment Variable oluşturma"""
+        """
+        Create a new environment variable with validation and encryption support.
+        
+        Args:
+            session (Session): Database session for transaction management
+            envar_data (Dict[str, Any]): Environment variable data including name, value, encryption flag
+            
+        Returns:
+            Dict[str, Any]: Created environment variable data in dictionary format
+            
+        Raises:
+            ValidationError: If name is invalid, empty, or already exists
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: Environment Variable Name
         name = envar_data.get('name', '').strip()
         if not name:

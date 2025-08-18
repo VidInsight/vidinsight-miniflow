@@ -8,18 +8,60 @@ from ...exceptions import ValidationError, BusinessLogicError
 
 
 class ExecutionInputOrchestrator(BaseOrchestration):
-    """Execution Input operasyonları için orchestrator"""
+    """
+    Execution input orchestration operations for task queue management.
+    
+    Provides high-level operations for managing execution inputs, task scheduling,
+    dependency tracking, and ready task identification for workflow execution.
+    """
 
     def __init__(self):
+        """
+        Initialize ExecutionInputOrchestrator.
+        
+        Args:
+            None
+            
+        Returns:
+            None
+            
+        Raises:
+            None
+        """
         super().__init__()
   
     def get_all(self, session: Session) -> List[Dict[str, Any]]:
-        """Tüm execution input'ları getir"""
+        """
+        Get all execution inputs from database.
+        
+        Args:
+            session (Session): Database session for transaction management
+            
+        Returns:
+            List[Dict[str, Any]]: List of all execution inputs in dictionary format
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         execution_inputs = self.execution_input_crud.get_all(session)
         return [execution_input.to_dict() for execution_input in execution_inputs]
         
     def get(self, session: Session, execution_input_id: str, include_details: bool = False) -> Dict[str, Any]:
-        """Execution input detayını getir"""
+        """
+        Get execution input by ID with optional detailed information.
+        
+        Args:
+            session (Session): Database session for transaction management
+            execution_input_id (str): Unique identifier of execution input to retrieve
+            include_details (bool): Whether to include node and execution details
+            
+        Returns:
+            Dict[str, Any]: Execution input data with optional detailed information
+            
+        Raises:
+            BusinessLogicError: If execution input with given ID not found
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: Execution Input ID
         execution_input = self.execution_input_crud.find_by_id(session, execution_input_id)
         if not execution_input:

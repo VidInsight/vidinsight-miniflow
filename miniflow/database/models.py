@@ -139,8 +139,8 @@ class Node(BaseModel):
     script: Optional["Script"] = relationship("Script", back_populates="nodes")
     edges_from: List["Edge"] = relationship("Edge", foreign_keys="[Edge.from_node_id]", back_populates="from_node",cascade="all, delete-orphan")
     edges_to: List["Edge"] = relationship("Edge", foreign_keys="[Edge.to_node_id]", back_populates="to_node",cascade="all, delete-orphan")
-    execution_inputs: List["ExecutionInput"] = relationship("ExecutionInput", back_populates="node")
-    execution_outputs: List["ExecutionOutput"] = relationship("ExecutionOutput", back_populates="node")
+    execution_inputs: List["ExecutionInput"] = relationship("ExecutionInput", back_populates="node", cascade="all, delete-orphan")
+    execution_outputs: List["ExecutionOutput"] = relationship("ExecutionOutput", back_populates="node", cascade="all, delete-orphan")
 
 
 # ======================================================================================================= EDGE MODEL  ==

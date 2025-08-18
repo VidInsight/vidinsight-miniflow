@@ -1,20 +1,41 @@
-# orchestration/workflow_orchestrator.py
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional, Union, List
 
 from ..models import WorkflowStatus
 from .base_orchestration import BaseOrchestration
 from ...exceptions import ValidationError, BusinessLogicError
+from ..models import ExecutionStatus
 
 
 class WorkflowOrchestrator(BaseOrchestration):
-    """ Workflow Orchestration Operations """
+    """
+    Workflow orchestration operations for workflow lifecycle management.
+    
+    Provides high-level operations for creating, updating, deleting, and managing
+    workflows with proper validation, business logic enforcement, and status management.
+    """
 
     def __init__(self):
+        """
+        Initialize WorkflowOrchestrator.
+        """
         super().__init__()
 
     def create(self, session: Session, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
-        """ Create a Workflow """
+        """
+        Create a new workflow with name uniqueness validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_data (Dict[str, Any]): Workflow data including name, description, priority, etc.
+            
+        Returns:
+            Dict[str, Any]: Created workflow data in dictionary format
+            
+        Raises:
+            ValidationError: If workflow name already exists
+            DatabaseError: If database operation fails
+        """
 
         # Validate if the name is not already in use
         existing_workflow = self.workflow_crud.find_by_name(session, workflow_data['name'])
@@ -28,7 +49,22 @@ class WorkflowOrchestrator(BaseOrchestration):
         return workflow.to_dict()
 
     def update(self, session: Session, workflow_id: str, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
-        """ Update Workflow """
+        """
+        Update existing workflow with validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to update
+            workflow_data (Dict[str, Any]): Updated workflow data
+            
+        Returns:
+            Dict[str, Any]: Updated workflow data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If workflow with given ID not found
+            ValidationError: If new workflow name already exists
+            DatabaseError: If database operation fails
+        """
 
         # Validate target workflow via ID
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
@@ -47,13 +83,48 @@ class WorkflowOrchestrator(BaseOrchestration):
         # 4. Return
         return updated_workflow.to_dict()
 
-    def delete(self, session: Session, workflow_id: str) -> Dict[str, Any]:
-        """ Delete Workflow """
+    def delete(self, session: Session, workflow_id: str, force: bool = False) -> Dict[str, Any]:
+        """
+        Delete workflow by ID with validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to delete
+            force (bool): Whether to force deletion ignoring active executions (default: False)
+            
+        Returns:
+            Dict[str, Any]: Deleted workflow data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If workflow not found or has active executions when force=False
+            DatabaseError: If database operation fails
+        """
 
         # Validate target workflow via ID
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
             raise BusinessLogicError(f"Workflow not found: {workflow_id}")
+
+        # Check for active executions
+        if not force:
+            running_executions = self.execution_crud.get_by_status_and_workflow(
+                session, workflow_id, ExecutionStatus.RUNNING
+            )
+            pending_executions = self.execution_crud.get_by_status_and_workflow(
+                session, workflow_id, ExecutionStatus.PENDING
+            )
+            
+            if running_executions:
+                raise BusinessLogicError(
+                    f"Cannot delete workflow '{workflow.name}' - it has {len(running_executions)} running executions. "
+                    f"Use force=True to override."
+                )
+            
+            if pending_executions:
+                raise BusinessLogicError(
+                    f"Cannot delete workflow '{workflow.name}' - it has {len(pending_executions)} pending executions. "
+                    f"Use force=True to override."
+                )
 
         # Delete workflow
         deleted_workflow = self.workflow_crud.delete_workflow(session, workflow_id)
@@ -62,7 +133,23 @@ class WorkflowOrchestrator(BaseOrchestration):
         return deleted_workflow.to_dict()
 
     def search(self, session: Session, search_criteria: Dict[str, Any], skip: int = 0, limit: int = 100, order_by_field: str = None) -> Dict[str, Any]:
-        """ Search Workflow """
+        """
+        Search workflows with filtering and pagination.
+        
+        Args:
+            session (Session): Database session for transaction management
+            search_criteria (Dict[str, Any]): Filter criteria for workflow search
+            skip (int): Number of records to skip for pagination (default: 0)
+            limit (int): Maximum number of records to return (default: 100)
+            order_by_field (str, optional): Field name to order results by
+            
+        Returns:
+            Dict[str, Any]: Search results with data, pagination info, and metadata
+            
+        Raises:
+            ValidationError: If search criteria contains invalid fields
+            DatabaseError: If database operation fails
+        """
 
         # Search workflows with given criteria
         workflows = self.workflow_crud.filter(session, search_criteria, skip=skip, limit=limit, order_by_field=order_by_field)
@@ -80,7 +167,21 @@ class WorkflowOrchestrator(BaseOrchestration):
         }
 
     def get(self, session: Session, workflow_id: str, include_details: bool) -> Dict[str, Any]:
-        """ Get Workflow """
+        """
+        Get workflow by ID with optional detailed information.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to retrieve
+            include_details (bool): Whether to include nodes and edges in response
+            
+        Returns:
+            Dict[str, Any]: Workflow data with counts and optional detailed information
+            
+        Raises:
+            BusinessLogicError: If workflow with given ID not found
+            DatabaseError: If database operation fails
+        """
 
         # Validate target workflow via ID
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
@@ -105,20 +206,67 @@ class WorkflowOrchestrator(BaseOrchestration):
         return workflow_dict
 
     def get_all(self, session: Session) -> List[Dict[str, Any]]:
-        """Tüm workflow'ları getir"""
+        """
+        Get all workflows from database.
+        
+        Args:
+            session (Session): Database session for transaction management
+            
+        Returns:
+            List[Dict[str, Any]]: List of all workflows in dictionary format
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         workflows = self.workflow_crud.get_all(session)
         return [workflow.to_dict() for workflow in workflows]
 
     def count(self, session: Session) -> int:
-        """ Count Workflow """
+        """
+        Count total number of workflows.
+        
+        Args:
+            session (Session): Database session for transaction management
+            
+        Returns:
+            int: Total count of workflows in database
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         return self.workflow_crud.count(session)
     
     def exists(self, session: Session, workflow_id: str) -> bool:
-        """ Exists Workflow """
+        """
+        Check if workflow exists by ID.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to check
+            
+        Returns:
+            bool: True if workflow exists, False otherwise
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         return self.workflow_crud.exists(session, workflow_id)
 
     def set_status_active(self, session: Session, workflow_id: str) -> Dict[str, Any]:
-        """ Set workflow status as ACTIVE """
+        """
+        Set workflow status to ACTIVE for execution.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to activate
+            
+        Returns:
+            Dict[str, Any]: Updated workflow data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If workflow with given ID not found
+            DatabaseError: If database operation fails
+        """
         # Validate target workflow via ID
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
@@ -128,7 +276,20 @@ class WorkflowOrchestrator(BaseOrchestration):
         return updated_workflow.to_dict()
 
     def set_status_draft(self, session: Session, workflow_id: str) -> Dict[str, Any]:
-        """ Set workflow status as DRAFT """
+        """
+        Set workflow status to DRAFT for development.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to set as draft
+            
+        Returns:
+            Dict[str, Any]: Updated workflow data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If workflow with given ID not found
+            DatabaseError: If database operation fails
+        """
         # Validate target workflow via ID
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
@@ -138,17 +299,54 @@ class WorkflowOrchestrator(BaseOrchestration):
         return updated_workflow.to_dict()
 
     def get_active_workflows(self, session: Session) -> List[Dict[str, Any]]:
-        """ Get workflows by status """
+        """
+        Get all workflows with ACTIVE status.
+        
+        Args:
+            session (Session): Database session for transaction management
+            
+        Returns:
+            List[Dict[str, Any]]: List of active workflows in dictionary format
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         workflows = self.workflow_crud.filter(session, {"status": WorkflowStatus.ACTIVE})
         return [workflow.to_dict() for workflow in workflows]
 
     def get_draft_workflows(self, session: Session) -> List[Dict[str, Any]]:
-        """ Get workflows by status """
+        """
+        Get all workflows with DRAFT status.
+        
+        Args:
+            session (Session): Database session for transaction management
+            
+        Returns:
+            List[Dict[str, Any]]: List of draft workflows in dictionary format
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         workflows = self.workflow_crud.filter(session, {"status": WorkflowStatus.DRAFT})
         return [workflow.to_dict() for workflow in workflows]
 
     def set_priority(self, session: Session, workflow_id: str, priority: int) -> Dict[str, Any]:
-        """ Set workflow priority """
+        """
+        Set workflow execution priority with validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to update
+            priority (int): Priority value between 0 and 10 (inclusive)
+            
+        Returns:
+            Dict[str, Any]: Updated workflow data in dictionary format
+            
+        Raises:
+            ValidationError: If priority is not an integer between 0 and 10
+            BusinessLogicError: If workflow with given ID not found
+            DatabaseError: If database operation fails
+        """
         # Validate priority range
         if not isinstance(priority, int) or not 0 <= priority <= 10:
             raise ValidationError(f"Priority must be an integer between 0 and 10, got: {priority}")
@@ -162,6 +360,17 @@ class WorkflowOrchestrator(BaseOrchestration):
         return updated_workflow.to_dict()
 
     def get_all_workflows(self, session: Session) -> List[Dict[str, Any]]:
-        """ Get all workflows """
+        """
+        Get all workflows from database (alias for get_all).
+        
+        Args:
+            session (Session): Database session for transaction management
+            
+        Returns:
+            List[Dict[str, Any]]: List of all workflows in dictionary format
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         workflows = self.workflow_crud.get_all(session)
         return [workflow.to_dict() for workflow in workflows]

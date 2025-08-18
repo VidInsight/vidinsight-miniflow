@@ -7,13 +7,45 @@ from ...exceptions import ValidationError, BusinessLogicError
 
 
 class EdgeOrchestrator(BaseOrchestration):
-    """Edge operasyonları için orchestrator"""
+    """
+    Edge orchestration operations for workflow connection management.
+    
+    Provides high-level operations for creating, updating, deleting, and managing
+    workflow node connections with proper validation, cycle detection, and
+    dependency management.
+    """
 
     def __init__(self):
+        """
+        Initialize EdgeOrchestrator.
+        
+        Args:
+            None
+            
+        Returns:
+            None
+            
+        Raises:
+            None
+        """
         super().__init__()
 
     def create(self, session: Session, edge_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Edge oluşturma"""
+        """
+        Create a new workflow edge with comprehensive validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            edge_data (Dict[str, Any]): Edge data including from_node_id, to_node_id, condition_type
+            
+        Returns:
+            Dict[str, Any]: Created edge data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If nodes not found or not in same workflow
+            ValidationError: If edge creates cycle or already exists
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: From Node ID
         from_node_id = edge_data.get('from_node_id')
         from_node = self.node_crud.find_by_id(session, from_node_id)
@@ -48,7 +80,22 @@ class EdgeOrchestrator(BaseOrchestration):
         return edge.to_dict()
 
     def update(self, session: Session, edge_id: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Edge güncelleme"""
+        """
+        Update existing edge with validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            edge_id (str): Unique identifier of edge to update
+            edge_data (Dict[str, Any]): Updated edge data
+            
+        Returns:
+            Dict[str, Any]: Updated edge data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If edge or nodes not found
+            ValidationError: If update creates invalid connection
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: Edge ID
         old_edge = self.edge_crud.find_by_id(session, edge_id)
         if not old_edge:
@@ -88,7 +135,20 @@ class EdgeOrchestrator(BaseOrchestration):
         return updated_edge.to_dict()
 
     def delete(self, session: Session, edge_id: str) -> Dict[str, Any]:
-        """Edge silme"""
+        """
+        Delete edge by ID with validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            edge_id (str): Unique identifier of edge to delete
+            
+        Returns:
+            Dict[str, Any]: Deleted edge data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If edge with given ID not found
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: Edge ID
         edge = self.edge_crud.find_by_id(session, edge_id)
         if not edge:

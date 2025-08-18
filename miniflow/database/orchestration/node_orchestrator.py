@@ -7,13 +7,45 @@ from ...exceptions import ValidationError, BusinessLogicError
 
 
 class NodeOrchestrator(BaseOrchestration):
-    """Node operasyonları için orchestrator"""
+    """
+    Node orchestration operations for workflow node management.
+    
+    Provides high-level operations for creating, updating, deleting, and managing
+    workflow nodes with proper validation, business logic enforcement, and
+    dependency management.
+    """
 
     def __init__(self):
+        """
+        Initialize NodeOrchestrator.
+        
+        Args:
+            None
+            
+        Returns:
+            None
+            
+        Raises:
+            None
+        """
         super().__init__()
 
     def create(self, session: Session, node_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Node oluşturma"""
+        """
+        Create a new workflow node with comprehensive validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            node_data (Dict[str, Any]): Node data including workflow_id, script_id, name, etc.
+            
+        Returns:
+            Dict[str, Any]: Created node data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If workflow or script not found
+            ValidationError: If node name is invalid, empty, or already exists in workflow
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: Workflow ID
         workflow_id = node_data.get('workflow_id')
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
@@ -48,7 +80,22 @@ class NodeOrchestrator(BaseOrchestration):
         return node.to_dict()
 
     def update(self, session: Session, node_id: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Node güncelleme"""
+        """
+        Update existing node with comprehensive validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            node_id (str): Unique identifier of node to update
+            node_data (Dict[str, Any]): Updated node data
+            
+        Returns:
+            Dict[str, Any]: Updated node data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If node, workflow, or script not found
+            ValidationError: If node name is invalid or already exists in workflow
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: Node ID
         old_node = self.node_crud.find_by_id(session, node_id)
         if not old_node:
@@ -92,7 +139,21 @@ class NodeOrchestrator(BaseOrchestration):
         return updated_node.to_dict()
 
     def delete(self, session: Session, node_id: str, force: bool = False) -> Dict[str, Any]:
-        """Node silme"""
+        """
+        Delete node with dependency validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            node_id (str): Unique identifier of node to delete
+            force (bool): Whether to force deletion ignoring dependencies (default: False)
+            
+        Returns:
+            Dict[str, Any]: Deleted node data in dictionary format
+            
+        Raises:
+            BusinessLogicError: If node not found or has dependencies when force=False
+            DatabaseError: If database operation fails
+        """
         # 1. VALIDATION: Node ID
         node = self.node_crud.find_by_id(session, node_id)
         if not node:

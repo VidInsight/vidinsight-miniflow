@@ -4,8 +4,16 @@ from sqlalchemy.orm import Session
 
 from .base_crud import BaseCRUD
 from ..models import EnvironmentVariable
-from ..decorators.auditlog_decorators import audit_create, audit_update, audit_delete, AuditMixin
-from ...exceptions import ValidationError, BusinessLogicError
+from ..decorators.auditlog_decorators import (
+    audit_create, 
+    audit_update, 
+    audit_delete, 
+    AuditMixin
+)
+from ...exceptions import (
+    ValidationError, 
+    BusinessLogicError
+)
 
 
 class EnvarCRUD(BaseCRUD[EnvironmentVariable], AuditMixin):
@@ -15,6 +23,7 @@ class EnvarCRUD(BaseCRUD[EnvironmentVariable], AuditMixin):
     """
 
     def __init__(self):
+        """Initialize EnvarCRUD with EnvironmentVariable model and audit capabilities."""
         super().__init__(EnvironmentVariable)
 
     # ============================================================================================== BUSINESS METHODS ==
@@ -35,5 +44,5 @@ class EnvarCRUD(BaseCRUD[EnvironmentVariable], AuditMixin):
         return super().delete(session, env_var_id)
 
     def get_by_encryption(self, session: Session, is_encrypted: bool) -> List[EnvironmentVariable]:
-        """Get all encrypted environment variables."""
+        """Get all environment variables filtered by encryption status."""
         return self.filter(session, {'is_encrypted': is_encrypted})

@@ -24,17 +24,23 @@ def audit_create(table_name: str):
         def wrapper(self, session, *args, **kwargs):
             result = func(self, session, *args, **kwargs)
 
-            # Audit log oluştur
+            # Audit log oluştur (with error handling)
             if hasattr(result, 'id') and hasattr(self, '_create_audit_log'):
-                new_values = _extract_model_data(result)
-                self._create_audit_log(
-                    session=session,
-                    table_name=table_name,
-                    record_id=result.id,
-                    action=AuditAction.CREATE,
-                    old_values=None,
-                    new_values=new_values
-                )
+                try:
+                    new_values = _extract_model_data(result)
+                    self._create_audit_log(
+                        session=session,
+                        table_name=table_name,
+                        record_id=result.id,
+                        action=AuditAction.CREATE,
+                        old_values=None,
+                        new_values=new_values
+                    )
+                except Exception as e:
+                    # Log the error but don't fail the create operation
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Failed to create audit log for create operation: {str(e)}")
 
             return result
 
@@ -59,28 +65,39 @@ def audit_update(table_name: str):
         def wrapper(self, session, record_id: Union[str, int], *args, **kwargs):
             # Update öncesi eski değerleri al
             old_record = None
+            old_values = None
+            
             if hasattr(self, 'find_by_id'):
                 try:
                     old_record = self.find_by_id(session, record_id)
-                except:
-                    pass  # Record bulunamadı, devam et
-
-            old_values = _extract_model_data(old_record) if old_record else None
+                    if old_record:
+                        old_values = _extract_model_data(old_record)
+                except Exception as e:
+                    # Log the error but don't fail the update operation
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to get old record for audit log: {str(e)}")
 
             # Update işlemini yap
             result = func(self, session, record_id, *args, **kwargs)
 
-            # Audit log oluştur
+            # Audit log oluştur (with error handling)
             if hasattr(result, 'id') and hasattr(self, '_create_audit_log'):
-                new_values = _extract_model_data(result)
-                self._create_audit_log(
-                    session=session,
-                    table_name=table_name,
-                    record_id=result.id,
-                    action=AuditAction.UPDATE,
-                    old_values=old_values,
-                    new_values=new_values
-                )
+                try:
+                    new_values = _extract_model_data(result)
+                    self._create_audit_log(
+                        session=session,
+                        table_name=table_name,
+                        record_id=result.id,
+                        action=AuditAction.UPDATE,
+                        old_values=old_values,
+                        new_values=new_values
+                    )
+                except Exception as e:
+                    # Log the error but don't fail the update operation
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Failed to create audit log for update operation: {str(e)}")
 
             return result
 
@@ -105,27 +122,38 @@ def audit_delete(table_name: str):
         def wrapper(self, session, record_id: Union[str, int], *args, **kwargs):
             # Delete öncesi record'u al
             old_record = None
+            old_values = None
+            
             if hasattr(self, 'find_by_id'):
                 try:
                     old_record = self.find_by_id(session, record_id)
-                except:
-                    pass  # Record bulunamadı, devam et
-
-            old_values = _extract_model_data(old_record) if old_record else None
+                    if old_record:
+                        old_values = _extract_model_data(old_record)
+                except Exception as e:
+                    # Log the error but don't fail the delete operation
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to get old record for audit log: {str(e)}")
 
             # Delete işlemini yap
             result = func(self, session, record_id, *args, **kwargs)
 
-            # Audit log oluştur
+            # Audit log oluştur (with error handling)
             if old_record and hasattr(self, '_create_audit_log'):
-                self._create_audit_log(
-                    session=session,
-                    table_name=table_name,
-                    record_id=record_id,
-                    action=AuditAction.DELETE,
-                    old_values=old_values,
-                    new_values=None
-                )
+                try:
+                    self._create_audit_log(
+                        session=session,
+                        table_name=table_name,
+                        record_id=record_id,
+                        action=AuditAction.DELETE,
+                        old_values=old_values,
+                        new_values=None
+                    )
+                except Exception as e:
+                    # Log the error but don't fail the delete operation
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Failed to create audit log for delete operation: {str(e)}")
 
             return result
 

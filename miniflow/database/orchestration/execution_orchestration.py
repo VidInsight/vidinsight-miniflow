@@ -4,18 +4,52 @@ from typing import Dict, Any, Optional, Union, List
 from datetime import datetime, timezone
 
 from .base_orchestration import BaseOrchestration
-from ...exceptions import ValidationError, BusinessLogicError
+from ...exceptions import (
+    ValidationError, 
+    BusinessLogicError
+)
 from ..models import ExecutionStatus
 
 
 class ExecutionOrchestrator(BaseOrchestration):
-    """Execution operasyonları için orchestrator"""
+    """
+    Execution orchestration operations for workflow execution management.
+    
+    Provides high-level operations for creating, monitoring, and managing
+    workflow executions with task scheduling, dependency resolution, and
+    result collection.
+    """
 
     def __init__(self):
+        """
+        Initialize ExecutionOrchestrator.
+        
+        Args:
+            None
+            
+        Returns:
+            None
+            
+        Raises:
+            None
+        """
         super().__init__()
 
     def create(self, session: Session, workflow_id: str) -> Dict[str, Any]:
-        """Execution oluşturma"""
+        """
+        Create a new workflow execution with task scheduling and dependency setup.
+        
+        Args:
+            session (Session): Database session for transaction management
+            workflow_id (str): Unique identifier of workflow to execute
+            
+        Returns:
+            Dict[str, Any]: Created execution data with task information
+            
+        Raises:
+            BusinessLogicError: If workflow not found or has no nodes
+            DatabaseError: If database operation fails
+        """
         workflow = self.workflow_crud.find_by_id(session, workflow_id)
         if not workflow:
             raise BusinessLogicError(f"Workflow not found: {workflow_id}")

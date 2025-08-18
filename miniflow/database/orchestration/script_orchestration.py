@@ -5,17 +5,55 @@ from typing import Dict, Any, Optional, Union, List
 
 from .base_orchestration import BaseOrchestration
 from ..models import WorkflowStatus, ScriptTestStatus
-from ...exceptions import ValidationError, BusinessLogicError, CRUDException, ResourceError
+from ...exceptions import (
+    ValidationError, 
+    BusinessLogicError, 
+    CRUDException, 
+    ResourceError
+)
 
 
 class ScriptOrchestrator(BaseOrchestration):
-    """Script operasyonları için orchestrator"""
+    """
+    Script orchestration operations for script lifecycle management.
+    
+    Provides high-level operations for creating, updating, deleting, and managing
+    executable scripts with file system integration, validation, and test status tracking.
+    """
 
     def __init__(self):
+        """
+        Initialize ScriptOrchestrator.
+        
+        Args:
+            None
+            
+        Returns:
+            None
+            
+        Raises:
+            None
+        """
         super().__init__()
 
     def create(self, session: Session, path: str, script_data: Dict[str, Any]) -> Dict[str, Any]:
-        """ Create Script """
+        """
+        Create a new script with file system integration and validation.
+        
+        Args:
+            session (Session): Database session for transaction management
+            path (str): File system path where script file will be created
+            script_data (Dict[str, Any]): Script data including name, content, language, etc.
+            
+        Returns:
+            Dict[str, Any]: Created script data in dictionary format
+            
+        Raises:
+            ValidationError: If script name is invalid, empty, or already exists
+            ResourceError: If script file already exists at the target path
+            FileSystemError: If script file cannot be written to disk
+            DatabaseError: If database operation fails
+        """
 
         # Validate script name
         name = script_data.get('name', '').strip()
@@ -157,16 +195,24 @@ class ScriptOrchestrator(BaseOrchestration):
             if nodes_using_script:
                 raise BusinessLogicError(f"Cannot delete script - it is being used by {len(nodes_using_script)} node(s). Use force=True to override.")
 
-        # 3. OPERATION: Delete script file
+        # 3. OPERATION: Delete script file (with better error handling)
+        file_deleted = False
         if script.script_path and os.path.exists(script.script_path):
             try:
+                # Check if file is writable
+                if not os.access(script.script_path, os.W_OK):
+                    raise ResourceError(f"Script file is not writable: {script.script_path}")
+                
                 os.remove(script.script_path)
+                file_deleted = True
             except (OSError, IOError) as e:
-                raise ResourceError(f"Failed to delete script file: {str(e)}")
+                if not force:
+                    raise ResourceError(f"Failed to delete script file: {str(e)}")
+                # If force=True, continue without file deletion
 
         # 4. OPERATION: Delete script in database
         deleted_script = self.script_crud.delete_script(session, script_id)
-
+  
         # 5. OPERATION: Change workflow status to draft
         for workflow_id in workflows:
             workflow = self.workflow_crud.find_by_id(session, workflow_id)
@@ -177,6 +223,7 @@ class ScriptOrchestrator(BaseOrchestration):
         result = deleted_script.to_dict()
         result['affected_nodes'] = len(nodes_using_script)
         result['affected_workflows'] = len(workflows)
+        result['file_deleted'] = file_deleted
         return result
 
     def search(self, session: Session, search_criteria: Dict[str, Any], skip: int = 0, limit: int = 100, order_by_field: str = None) -> Dict[str, Any]:

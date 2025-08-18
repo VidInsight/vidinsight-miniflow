@@ -10,6 +10,14 @@ from .scheduler_orchestration import SchedulerOrchestrator
 
 
 class DatabaseOrchestrator:
+    """
+    Central orchestrator providing unified access to all database orchestration operations.
+    
+    This class serves as the main entry point for all database operations in the miniflow
+    system. It provides access to specialized orchestrators for different entities and
+    includes bridge methods for scheduler integration.
+    """
+    
     workflow_orchestrator = WorkflowOrchestrator()
     script_orchestrator = ScriptOrchestrator()
     envar_orchestrator = EnvarOrchestrator()
@@ -24,17 +32,67 @@ class DatabaseOrchestrator:
     # These methods bridge Input/Output monitors to SchedulerOrchestrator
     
     def get_ready_tasks(self, session, limit: int = 50):
-        """Bridge method: Get ready tasks for Input Monitor"""
+        """
+        Bridge method to get ready tasks for Input Monitor.
+        
+        Args:
+            session: Database session for transaction management
+            limit (int): Maximum number of tasks to retrieve (default: 50)
+            
+        Returns:
+            List of ready tasks from scheduler orchestrator
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         return self.scheduler_orchestrator.get_ready_tasks(session, limit)
     
     def create_task_payload(self, session, task):
-        """Bridge method: Create task payload for Input Monitor"""
+        """
+        Bridge method to create task payload for Input Monitor.
+        
+        Args:
+            session: Database session for transaction management
+            task: Task object to create payload for
+            
+        Returns:
+            Dict containing task payload data
+            
+        Raises:
+            ValidationError: If task data is invalid
+            DatabaseError: If database operation fails
+        """
         return self.scheduler_orchestrator.create_task_payload(task)
     
     def remove_completed_tasks(self, session, task_ids):
-        """Bridge method: Remove completed tasks for Input Monitor"""
+        """
+        Bridge method to remove completed tasks for Input Monitor.
+        
+        Args:
+            session: Database session for transaction management
+            task_ids: List of task IDs to remove
+            
+        Returns:
+            Number of tasks successfully removed
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
         return self.scheduler_orchestrator.delete_completed_tasks(session, task_ids)
     
     def process_execution_result(self, session, result):
-        """Bridge method: Process execution result for Output Monitor"""
+        """
+        Bridge method to process execution result for Output Monitor.
+        
+        Args:
+            session: Database session for transaction management
+            result: Execution result data to process
+            
+        Returns:
+            Processed result data
+            
+        Raises:
+            ValidationError: If result data is invalid
+            DatabaseError: If database operation fails
+        """
         return self.scheduler_orchestrator.process_execution_result(session, result)
