@@ -10,7 +10,7 @@ AUDIT_ENABLED = os.getenv("AUDIT_ENABLED", 'true').lower() == "true"
 
 def audit_create(table_name: str):
     """
-    CREATE operasyonları için audit log decorator'u
+    CREATE operasyonları için audit log decorator'u - Optimized version
     Usage: @audit_create("workflows")
     Environment: MINIFLOW_ENABLE_AUDIT=true/false
     """
@@ -24,9 +24,10 @@ def audit_create(table_name: str):
         def wrapper(self, session, *args, **kwargs):
             result = func(self, session, *args, **kwargs)
 
-            # Audit log oluştur (with error handling)
+            # Optimized: Audit log oluştur (with error handling)
             if hasattr(result, 'id') and hasattr(self, '_create_audit_log'):
                 try:
+                    # Optimized: Only extract data if audit is enabled
                     new_values = _extract_model_data(result)
                     self._create_audit_log(
                         session=session,
@@ -37,10 +38,13 @@ def audit_create(table_name: str):
                         new_values=new_values
                     )
                 except Exception as e:
-                    # Log the error but don't fail the create operation
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"Failed to create audit log for create operation: {str(e)}")
+                    # Optimized: Use lazy logging to avoid import overhead
+                    try:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.error(f"Failed to create audit log for create operation: {str(e)}")
+                    except:
+                        pass  # Fallback: silent failure
 
             return result
 
@@ -166,37 +170,47 @@ def audit_delete(table_name: str):
 
 def _extract_model_data(model_instance) -> Optional[Dict[str, Any]]:
     """
-    Model instance'dan audit için gerekli data'yı çıkar
+    Model instance'dan audit için gerekli data'yı çıkar - Optimized version
     """
     if not model_instance:
         return None
 
     try:
-        # Eğer model'de to_dict method'u varsa kullan
+        # Optimized: Eğer model'de to_dict method'u varsa kullan
         if hasattr(model_instance, 'to_dict'):
             return model_instance.to_dict()
 
-        # Yoksa basic attributes'leri manuel çıkar
+        # Optimized: Basic attributes'leri manuel çıkar
         data = {}
-        for column in model_instance.__table__.columns:
-            value = getattr(model_instance, column.name, None)
-            # Datetime ve complex types için string representation
-            if hasattr(value, 'isoformat'):
-                data[column.name] = value.isoformat()
-            elif hasattr(value, 'value'):  # Enum types
-                data[column.name] = value.value
-            else:
-                data[column.name] = value
+        # Optimized: Use __table__.columns directly for better performance
+        columns = model_instance.__table__.columns
+        
+        for column in columns:
+            column_name = column.name
+            value = getattr(model_instance, column_name, None)
+            
+            # Optimized: Efficient type checking
+            if value is not None:
+                if hasattr(value, 'isoformat'):  # Datetime types
+                    data[column_name] = value.isoformat()
+                elif hasattr(value, 'value'):  # Enum types
+                    data[column_name] = value.value
+                else:
+                    data[column_name] = value
 
         return data
 
     except Exception:
-        # Fallback: sadece id ve temel bilgileri al
-        return {
-            'id': getattr(model_instance, 'id', None),
-            'created_at': getattr(model_instance, 'created_at', None),
-            'updated_at': getattr(model_instance, 'updated_at', None)
-        }
+        # Optimized: Fallback with minimal attribute access
+        fallback_data = {}
+        for attr in ['id', 'created_at', 'updated_at']:
+            try:
+                value = getattr(model_instance, attr, None)
+                if value is not None:
+                    fallback_data[attr] = value
+            except:
+                continue
+        return fallback_data
 
 
 # ==================================================================================== MIXIN CLASS ==

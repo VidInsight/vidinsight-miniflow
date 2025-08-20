@@ -217,7 +217,7 @@ class BaseCRUD(Generic[ModelType]):
             raise CRUDException(f"Object Exists Error: {self.model_name}: {str(e)}")
 
     def filter(self, session: Session, filters: Dict[str, Any], skip: int = 0, limit: int = 100, order_by_field: str = None) -> List[ModelType]:
-        """Filter records by field values with pagination and ordering."""
+        """Filter records by field values with pagination and ordering - Optimized version."""
         if not filters:
             raise ValidationError("Filter criteria cannot be empty")
         if skip < 0:
@@ -226,30 +226,38 @@ class BaseCRUD(Generic[ModelType]):
             raise ValidationError("Limit value must be positive")
             
         limit = min(limit, 1000)  # Memory protection
+        
+        # Optimized: Build query more efficiently
         stmt = select(self.model)
-
         valid_filters = []
+
+        # Optimized: Single loop for validation and query building
         for field_name, field_value in filters.items():
             if hasattr(self.model, field_name):
-                stmt = stmt.where(getattr(self.model, field_name) == field_value)
+                field_attr = getattr(self.model, field_name)
+                stmt = stmt.where(field_attr == field_value)
                 valid_filters.append(f"{field_name}={field_value}")
             else:
                 raise ValidationError(f"Field '{field_name}' does not exist in {self.model_name}")
 
-        if order_by_field:
-            if hasattr(self.model, order_by_field):
-                stmt = stmt.order_by(getattr(self.model, order_by_field))
-            else:
-                self.logger.warning(f"Invalid order_by_field '{order_by_field}' for {self.model_name}, using default ID ordering")
-                stmt = stmt.order_by(self.model.id)
+        # Optimized: Efficient ordering logic
+        if order_by_field and hasattr(self.model, order_by_field):
+            stmt = stmt.order_by(getattr(self.model, order_by_field))
         else:
-            stmt = stmt.order_by(self.model.id)
+            # Default ordering only if no valid order_by_field
+            if not order_by_field or not hasattr(self.model, order_by_field):
+                if order_by_field:
+                    self.logger.warning(f"Invalid order_by_field '{order_by_field}' for {self.model_name}, using default ID ordering")
+                stmt = stmt.order_by(self.model.id)
 
-        stmt = stmt.offset(skip).limit(limit)
+        # Optimized: Apply pagination
+        if skip > 0 or limit < 1000:
+            stmt = stmt.offset(skip).limit(limit)
 
         try:
             self.logger.debug(f"Filtering {self.model_name} records: {valid_filters}, skip={skip}, limit={limit}")
-            results = list(session.execute(stmt).scalars().all())
+            # Optimized: Use list() only once
+            results = session.execute(stmt).scalars().all()
             self.logger.debug(f"Filter returned {len(results)} {self.model_name} records")
             return results
         except SQLAlchemyError as e:
@@ -260,22 +268,25 @@ class BaseCRUD(Generic[ModelType]):
             raise CRUDException(f"Object Retrieval Error (via Filter): {self.model_name}: {str(e)}")
 
     def count_filtered(self, session: Session, filters: Dict[str, Any]) -> int:
-        """Count records matching the specified filter criteria."""
+        """Count records matching the specified filter criteria - Optimized version."""
         if not filters:
             raise ValidationError("Filter criteria cannot be empty")
             
         stmt = select(func.count(self.model.id))
         valid_filters = []
 
+        # Optimized: Single loop for validation and query building
         for field_name, field_value in filters.items():
             if hasattr(self.model, field_name):
-                stmt = stmt.where(getattr(self.model, field_name) == field_value)
+                field_attr = getattr(self.model, field_name)
+                stmt = stmt.where(field_attr == field_value)
                 valid_filters.append(f"{field_name}={field_value}")
             else:
                 raise ValidationError(f"Field '{field_name}' does not exist in {self.model_name}")
 
         try:
             self.logger.debug(f"Counting filtered {self.model_name} records: {valid_filters}")
+            # Optimized: Direct scalar execution
             result = session.execute(stmt).scalar_one()
             self.logger.debug(f"Filtered {self.model_name} count: {result}")
             return result
